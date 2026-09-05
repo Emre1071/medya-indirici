@@ -1,7 +1,42 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// ====================================================================
+// IMZA ANAHTARI
+//
+// Degerler `android/key.properties` dosyasindan okunuyor; o dosya da
+// keystore'un kendisi de repoda YOK (.gitignore). Keystore depo agacinin
+// tamamen disinda duruyor.
+//
+// ## Nicin bu kadar onemli
+// Android, bir uygulamanin guncellemesini ancak AYNI anahtarla
+// imzalanmissa kabul ediyor. Anahtar degisirse ya da kaybolursa
+// kullanici "uygulamayi kaldir, yeniden kur" yapmak zorunda kalir —
+// gecmisi ve ayarlari gider. Bu yuzden anahtar bir kez uretildi ve
+// degistirilmeyecek.
+//
+// ## key.properties yoksa ne oluyor?
+// Depoyu klonlayan biri (ya da CI) o dosyaya sahip olmuyor. Derlemenin
+// tamamen durmasi yerine debug anahtarina dusuluyor ki kod calistirilip
+// denenebilsin. Ama bu APK **dagitilamaz**; ayrimin gozden kacmamasi
+// icin derleme sirasinda uyari basiliyor.
+// ====================================================================
+val anahtarOzellikleri = Properties()
+val anahtarDosyasi = rootProject.file("key.properties")
+val anahtarVar = anahtarDosyasi.exists()
+
+if (anahtarVar) {
+    anahtarDosyasi.inputStream().use { anahtarOzellikleri.load(it) }
+} else {
+    logger.warn(
+        "UYARI: android/key.properties bulunamadi. Release derlemesi DEBUG " +
+            "anahtariyla imzalanacak — bu APK dagitilamaz."
+    )
 }
 
 android {
@@ -55,11 +90,29 @@ android {
     // (2019 sonrasi tum telefonlar).
     // ====================================================================
 
+    signingConfigs {
+        // key.properties yoksa bu yapilandirma bos kalir ve kullanilmaz;
+        // olusturulmasi tek basina zararsiz.
+        create("release") {
+            keyAlias = anahtarOzellikleri.getProperty("keyAlias")
+            keyPassword = anahtarOzellikleri.getProperty("keyPassword")
+            storePassword = anahtarOzellikleri.getProperty("storePassword")
+
+            // Yol mutlak: keystore proje agacinin disinda duruyor.
+            val depoYolu = anahtarOzellikleri.getProperty("storeFile")
+            if (depoYolu != null) storeFile = file(depoYolu)
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (anahtarVar) {
+                signingConfigs.getByName("release")
+            } else {
+                // Anahtar yokken derlemeyi tamamen durdurmuyoruz; yukaridaki
+                // uyari basiliyor ve cikan APK dagitilmiyor.
+                signingConfigs.getByName("debug")
+            }
         }
     }
 

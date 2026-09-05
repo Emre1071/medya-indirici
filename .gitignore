@@ -25,3 +25,19 @@ build/
 # disarida tutuluyor. Ayni kural gidek deposunda da gecerli (PLANLAMA.txt).
 # Repoya girmesi isteniyorsa bu satir silinir.
 Planlama_MP3.txt
+
+# ============================================================
+# IMZA ANAHTARI — ASLA REPOYA GIRMEZ
+#
+# Bu anahtar kaybolursa ya da sizarsa geri donusu yok:
+# - Kaybolursa yeni surum yayinlanamaz (kullanici uygulamayi
+#   kaldirip yeniden kurmak zorunda kalir).
+# - Sizarsa baskasi bizim uygulamamiz gibi imzali APK uretebilir.
+#
+# Keystore zaten depo agacinin DISINDA duruyor
+# (C:/Users/eavci/AnahtarDeposu/). Bu kurallar ikinci savunma hatti:
+# birisi anahtari proje icine kopyalarsa yine de commit'lenmesin.
+# ============================================================
+*.jks
+*.keystore
+key.properties
