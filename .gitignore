@@ -1,0 +1,27 @@
+# Depo koku. Flutter'a ozgu kurallar `app/.gitignore` icinde duruyor;
+# burasi yalnizca her yerde gecerli olanlar.
+
+# Makineye ozgu yollar. Android SDK'nin yeri her bilgisayarda farkli;
+# repoya girerse baska bir makinede derleme bozulur.
+app/android/local.properties
+
+# Isletim sistemi cop dosyalari
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Derleme ciktilari (app/.gitignore da kapsiyor, burada da duruyor ki
+# depo kokunden bakan biri kacirmasin)
+build/
+.dart_tool/
+
+# APK repoya GIRMEZ. Dagitim GitHub Releases uzerinden yapiliyor;
+# 59 MB'lik dosyalari git gecmisine koymak depoyu sisirir ve geri
+# alinamaz. Bkz. notlar/KARARLAR.md
+*.apk
+*.aab
+
+# Yahya'nin yerel calisma defteri. Depo PUBLIC oldugu icin kisisel notlar
+# disarida tutuluyor. Ayni kural gidek deposunda da gecerli (PLANLAMA.txt).
+# Repoya girmesi isteniyorsa bu satir silinir.
+Planlama_MP3.txt

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FileProvider'in paylasmasina izin verilen klasorler.
+
+  Yalnizca uygulamanin KENDI onbellek klasoru aciliyor — indirilen guncelleme
+  APK'si oraya yaziliyor (Dart tarafinda getTemporaryDirectory()).
+  Baska hicbir yer paylasilmiyor: burasi genisletilirse uygulamanin ozel
+  verisi disariya acilabilir hale gelir.
+
+  DIKKAT: Asama 5'te indirilen videolar icin BURASI KULLANILMAYACAK.
+  Onlar MediaStore uzerinden telefonun Muzik/Filmler klasorune yazilacak;
+  o ayri bir mekanizma ve bu saglayiciyi genisletmeyi gerektirmiyor.
+-->
+<paths>
+    <cache-path name="guncelleme" path="." />
+</paths>
