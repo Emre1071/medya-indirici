@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../cekirdek/tema.dart';
+import '../../servisler/indirme_motoru.dart';
 import '../../servisler/kuyruk_yoneticisi.dart';
 import '../ortak/is_karti.dart';
 
@@ -19,14 +20,14 @@ class AnaEkran extends StatefulWidget {
   /// kabugun isi (yonlendirme tek yerden yonetiliyor).
   final void Function(String adres) onizlemeyiAc;
 
-  /// Motor (gomulu yt-dlp) calismaya hazir mi? Kabuktan geliyor.
-  final bool motorHazir;
+  /// Motorun (gomulu yt-dlp) acilis durumu. Kabuktan geliyor.
+  final MotorDurumu motorDurumu;
 
   const AnaEkran({
     super.key,
     required this.kuyruk,
     required this.onizlemeyiAc,
-    required this.motorHazir,
+    required this.motorDurumu,
   });
 
   @override
@@ -62,12 +63,17 @@ class _AnaEkraniState extends State<AnaEkran> {
     // Motor hazir degilken cozumlemeye kalkismak, kullaniciya teknik bir
     // hata gostermek olurdu. Yazdigi adres kutuda kaliyor: birkac saniye
     // sonra tekrar basmasi yetiyor, bastan yapistirmak zorunda degil.
-    if (!widget.motorHazir) {
+    //
+    // Kurulum basarisiz olduysa "biraz sonra dene" demek yalan olurdu;
+    // o durumda sebep gosteriliyor.
+    final durum = widget.motorDurumu;
+    if (!durum.hazirMi) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text(
-            'Motor hazırlanıyor… Birkaç saniye sonra tekrar dene.',
+            durum.hata ?? 'Motor hazırlanıyor… Birkaç saniye sonra tekrar dene.',
           ),
+          backgroundColor: durum.kurulamadiMi ? Renkler.hata : null,
         ),
       );
       return;
@@ -102,7 +108,8 @@ class _AnaEkraniState extends State<AnaEkran> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (!widget.motorHazir) const _MotorHazirlaniyor(),
+            if (!widget.motorDurumu.hazirMi)
+              _MotorSeridi(durum: widget.motorDurumu),
             Padding(
               padding: const EdgeInsets.all(Olculer.kenarBosluk),
               child: Column(
@@ -180,42 +187,62 @@ class _AnaEkraniState extends State<AnaEkran> {
   }
 }
 
-/// Motor acilirken ekranin ustunde duran serit.
+/// Motor hazir degilken ekranin ustunde duran serit.
+///
+/// ## Iki ayri hali var, ikisi farkli sey soyluyor
+/// - **Hazirlaniyor** — sari, donen cark. Beklemek dogru.
+/// - **Kurulamadi** — kirmizi, cark yok. Beklemenin anlami yok; sebep
+///   yaziyor ve kullanici ne yapabilecegini goruyor.
+///
+/// Ikisini ayirmak sart: motor hic acilmayacakken sonsuza kadar donen bir
+/// cark gostermek, uygulamanin takildigi izlenimini verir ve kullanici
+/// yapabilecegi seyi (dogru APK'yi kurmak, yer acmak) hic ogrenemez.
 ///
 /// ## Nicin engelleyici bir ekran degil?
 /// Bekleme birkac saniye ve kullanicinin bu sirada yapabilecegi isler var
 /// (gecmise bakmak, ayarlari acmak). Uygulamanin onune tam ekran bir
 /// bekleme koymak, ilk acilisi oldugundan uzun hissettirirdi. Serit yalniz
 /// haber veriyor; asil engelleme "Çözümle"ye basildiginda oluyor.
-class _MotorHazirlaniyor extends StatelessWidget {
-  const _MotorHazirlaniyor();
+class _MotorSeridi extends StatelessWidget {
+  final MotorDurumu durum;
+
+  const _MotorSeridi({required this.durum});
 
   @override
   Widget build(BuildContext context) {
+    final bozuk = durum.kurulamadiMi;
+    final renk = bozuk ? Renkler.hata : Renkler.uyari;
+
     return Container(
       width: double.infinity,
-      color: Renkler.uyari.withValues(alpha: 0.12),
+      color: renk.withValues(alpha: 0.12),
       padding: const EdgeInsets.symmetric(
         horizontal: Olculer.kenarBosluk,
         vertical: 10,
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(
-            width: 14,
-            height: 14,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation(Renkler.uyari),
+          if (bozuk)
+            Icon(Icons.error_outline, size: 16, color: renk)
+          else
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation(renk),
+              ),
             ),
-          ),
           const SizedBox(width: 10),
-          const Expanded(
+          Expanded(
             child: Text(
-              'Motor hazırlanıyor… İlk açılışta birkaç saniye sürer.',
+              durum.hata ??
+                  'Motor hazırlanıyor… İlk açılışta birkaç saniye sürer.',
               style: TextStyle(
                 fontSize: Olculer.kucukBilgi,
-                color: Renkler.uyari,
+                color: renk,
+                height: 1.35,
               ),
             ),
           ),

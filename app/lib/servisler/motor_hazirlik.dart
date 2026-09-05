@@ -27,24 +27,34 @@ class MotorHazirlik {
 
   /// Motor hazir olana kadar bekler.
   ///
-  /// Doner: motor gercekten hazirsa `true`, sinir dolduysa `false`.
+  /// Doner: son okunan [MotorDurumu]. Uc bicimde bitiyor —
+  /// **hazir**, **kurulamadi** ya da sinir doldugu icin hala
+  /// **hazirlaniyor**.
+  ///
+  /// 🔑 **Kurulum basarisiz olursa hemen vazgeciliyor.** Eskiden yalnizca
+  /// "hazir mi" sorulurdu ve motor hic acilmayacak olsa bile 30 saniye
+  /// yoklanirdi; kullanici o sure boyunca "hazırlanıyor" yazisina bakip
+  /// uygulamanin takildigini sanardi. Artik sebep aninda ekrana cikiyor.
   ///
   /// [devamEdilsinMi] her denemeden once soruluyor; `false` derse bekleme
   /// birakiliyor. Ekranlar bunu `mounted` ile besliyor — kapanmis bir
   /// ekran icin 30 saniye boyunca yoklamaya devam etmek bosuna.
-  static Future<bool> bekle(
+  static Future<MotorDurumu> bekle(
     IndirmeMotoru motor, {
     Duration aralik = varsayilanAralik,
     int denemeSiniri = varsayilanDenemeSiniri,
     bool Function()? devamEdilsinMi,
   }) async {
-    for (var deneme = 0; deneme < denemeSiniri; deneme++) {
-      if (devamEdilsinMi != null && !devamEdilsinMi()) return false;
+    var son = const MotorDurumu.hazirlaniyor();
 
-      if (await motor.hazirMi()) return true;
+    for (var deneme = 0; deneme < denemeSiniri; deneme++) {
+      if (devamEdilsinMi != null && !devamEdilsinMi()) return son;
+
+      son = await motor.durum();
+      if (!son.bekleniyorMu) return son;
 
       await Future<void>.delayed(aralik);
     }
-    return false;
+    return son;
   }
 }

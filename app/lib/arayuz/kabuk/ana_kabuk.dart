@@ -43,13 +43,13 @@ class _AnaKabukState extends State<AnaKabuk> {
   /// Guncelleme kontrolunun sonucu. Kontrol bitene kadar `null`.
   GuncellemeSonucu? _guncelleme;
 
-  /// Indirme motoru calismaya hazir mi?
+  /// Indirme motorunun acilis durumu.
   ///
   /// Ilk acilista gomulu Python ve ffmpeg ikilileri aciliyor; bu birkac
-  /// saniye suruyor ve o sirada gelen her cagri hata donuyor. Kullanici
-  /// tam o anda link yapistirirsa anlamsiz bir hata gormesin diye durum
-  /// burada tutulup ekranlara veriliyor.
-  bool _motorHazir = false;
+  /// saniye suruyor ve o sirada gelen her cagri hata donuyor. Kurulum
+  /// tamamen basarisiz da olabiliyor — arayuz "birazdan hazir olacak" ile
+  /// "hic acilmayacak" arasindaki farki gostermek zorunda.
+  MotorDurumu _motorDurumu = const MotorDurumu.hazirlaniyor();
 
   final PaylasimDinleyici _paylasim = PaylasimDinleyici();
   StreamSubscription<String>? _paylasimAbonesi;
@@ -107,19 +107,23 @@ class _AnaKabukState extends State<AnaKabuk> {
     _onizlemeyiAc(adres);
   }
 
-  /// Motor hazir olana kadar bekleyip uyari seridini kaldirir.
+  /// Motorun acilmasini bekleyip sonucu ekranlara verir.
   ///
   /// Bekleme mantigi [MotorHazirlik]'te — ayni is onizleme sayfasinda da
-  /// gerekiyor. Sinir dolup motor hazir olmasa bile serit kaldiriliyor:
+  /// gerekiyor. Sinir dolup motor hala acilmadiysa **hazir kabul ediliyor**:
   /// gercek sebep motorun kendi hata mesajindan gelsin, ekranda sonsuza
-  /// kadar "hazırlanıyor" yazmasin.
+  /// kadar "hazırlanıyor" yazmasin. Kurulum acikca basarisiz olduysa o
+  /// durum oldugu gibi tasiniyor ve sebep ekranda goruluyor.
   Future<void> _motoruBekle() async {
-    await MotorHazirlik.bekle(
+    final sonuc = await MotorHazirlik.bekle(
       widget.motor,
       devamEdilsinMi: () => mounted,
     );
     if (!mounted) return;
-    setState(() => _motorHazir = true);
+
+    setState(() {
+      _motorDurumu = sonuc.bekleniyorMu ? const MotorDurumu.hazir() : sonuc;
+    });
   }
 
   /// Acilista **sessizce** bakiliyor.
@@ -164,7 +168,7 @@ class _AnaKabukState extends State<AnaKabuk> {
       AnaEkran(
         kuyruk: _kuyruk,
         onizlemeyiAc: _onizlemeyiAc,
-        motorHazir: _motorHazir,
+        motorDurumu: _motorDurumu,
       ),
       IndirilenlerEkrani(kuyruk: _kuyruk),
       AyarlarEkrani(

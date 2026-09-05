@@ -175,14 +175,55 @@ class YtDlpMotoru implements IndirmeMotoru {
     }
   }
 
-  /// Motor kurulumu bitti mi? Ilk acilistan hemen sonra `false` olabilir.
+  /// Motorun acilis durumu.
+  ///
+  /// Android tarafi hem "hazir mi" hem de "kurulum neden basarisiz oldu"
+  /// bilgisini birlikte veriyor. Ikisini ayirmak sart: kurulum basarisizsa
+  /// beklemenin anlami yok ve kullaniciya sebebi gosterilmeli.
   @override
-  Future<bool> hazirMi() async {
+  Future<MotorDurumu> durum() async {
     try {
-      return await _komut.invokeMethod<bool>('hazirMi') ?? false;
+      final ham = await _komut.invokeMapMethod<String, Object?>('motorDurumu');
+      if (ham == null) return const MotorDurumu.hazirlaniyor();
+
+      if (ham['hazir'] == true) return const MotorDurumu.hazir();
+
+      final hata = ham['hata'] as String?;
+      if (hata == null || hata.isEmpty) {
+        return const MotorDurumu.hazirlaniyor();
+      }
+      return MotorDurumu.kurulamadi(_kurulumHatasiCevir(hata));
     } on PlatformException {
-      return false;
+      return const MotorDurumu.hazirlaniyor();
+    } on MissingPluginException {
+      // Kanal yoksa (beklenmedik derleme) beklemeye devam etmek yanlis
+      // olurdu; ama bunu "kurulamadi" sayip kullaniciyi korkutmak da
+      // dogru degil. Motorun kendi hata mesaji zaten cozumlemede cikacak.
+      return const MotorDurumu.hazirlaniyor();
     }
+  }
+
+  /// Kurulum hatasini kullanicinin yapabilecegi bir seye cevirir.
+  ///
+  /// En olasi sebep **yanlis mimari**: telefonun islemcisine uymayan bir
+  /// APK kurulmussa gomulu ikili acilamiyor. Ham `UnsatisfiedLinkError`
+  /// metnini gostermek kullaniciya hicbir sey soylemez.
+  String _kurulumHatasiCevir(String ham) {
+    final m = ham.toLowerCase();
+
+    if (m.contains('unsatisfiedlink') ||
+        m.contains('dlopen') ||
+        m.contains('.so') ||
+        m.contains('library')) {
+      return 'İndirme motoru bu telefonda açılamadı. Kurulan APK '
+          'telefonun işlemcisine uygun olmayabilir — arm64 sürümünü kur.';
+    }
+    if (m.contains('space') || m.contains('enospc')) {
+      return 'İndirme motoru açılamadı: telefonda yer kalmamış. '
+          'Biraz yer açıp uygulamayı yeniden başlat.';
+    }
+    return 'İndirme motoru başlatılamadı. Uygulamayı kapatıp yeniden '
+        'açmayı, olmazsa yeniden kurmayı dene.';
   }
 
   // ------------------------------------------------------------- cevirmeler

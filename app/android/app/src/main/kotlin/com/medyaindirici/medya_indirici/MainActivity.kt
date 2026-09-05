@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -56,14 +57,31 @@ class MainActivity : FlutterActivity() {
     private val paylasim = PaylasimKoprusu()
 
     companion object {
+        private const val ETIKET = "MainActivity"
+
         /** Depolama izni istegini tanimak icin; cevabi ayrica islemiyoruz. */
         private const val DEPOLAMA_IZIN_KODU = 1071
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        paylasim.acilistakiIntent(intent)
-        eskiAndroidDepolamaIzniniIste()
+
+        // Acilis adimlarinin hicbiri uygulamayi cokertemez.
+        //
+        // Buradaki isler ikinci derecede: paylasim metnini almak ve izin
+        // istemek. Biri patlarsa uygulamanin acilmamasi kabul edilemez —
+        // kullanici link yapistirarak yine indirme yapabilir.
+        try {
+            paylasim.acilistakiIntent(intent)
+        } catch (h: Throwable) {
+            Log.e(ETIKET, "Acilistaki paylasim okunamadi", h)
+        }
+
+        try {
+            eskiAndroidDepolamaIzniniIste()
+        } catch (h: Throwable) {
+            Log.e(ETIKET, "Depolama izni istenemedi", h)
+        }
     }
 
     /**
@@ -110,11 +128,25 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        motor = MotorKopru(applicationContext)
-        motor.kur()
-        motor.kanallariBagla(flutterEngine.dartExecutor.binaryMessenger)
+        // Motor kurulumu uygulamayi cokertemez.
+        //
+        // `MotorKopru.kur()` zaten kendi icinde Throwable yakaliyor, ama
+        // kurulusun kendisi (sinif olusturma, kanal baglama) da patlayabilir.
+        // Patlarsa arayuz aciliyor ve motor cagrilari "hazir degil" donuyor;
+        // kullanici kapanan bir uygulama yerine sebebini goruyor.
+        try {
+            motor = MotorKopru(applicationContext)
+            motor.kur()
+            motor.kanallariBagla(flutterEngine.dartExecutor.binaryMessenger)
+        } catch (h: Throwable) {
+            Log.e(ETIKET, "Motor koprusu kurulamadi", h)
+        }
 
-        paylasim.kanallariBagla(flutterEngine.dartExecutor.binaryMessenger)
+        try {
+            paylasim.kanallariBagla(flutterEngine.dartExecutor.binaryMessenger)
+        } catch (h: Throwable) {
+            Log.e(ETIKET, "Paylasim koprusu kurulamadi", h)
+        }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, kanalAdi)
             .setMethodCallHandler { cagri, cevap ->

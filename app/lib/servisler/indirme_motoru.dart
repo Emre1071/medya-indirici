@@ -17,6 +17,43 @@ class MotorHatasi implements Exception {
   String toString() => mesaj;
 }
 
+/// Motorun acilis durumu.
+///
+/// ## Nicin duz `bool` degil?
+/// Uc ayri hal var ve ucu de kullaniciya farkli sey soylemeli:
+///
+/// - **hazirlaniyor** — gomulu ikililer aciliyor, birkac saniye surecek.
+///   Beklemek dogru.
+/// - **hazir** — is gorulebilir.
+/// - **kurulamadi** — kurulum BASARISIZ oldu, beklemenin anlami yok.
+///
+/// Duz `bool` ile son iki hal ayirt edilemiyordu: motor hic acilmasa da
+/// arayuz "hazırlanıyor" deyip duruyor, kullanici da uygulamanin
+/// takildigini saniyordu. Oysa yapabilecegi bir sey olabilir (dogru APK'yi
+/// kurmak, yer acmak) — ama once sebebi gormesi gerek.
+class MotorDurumu {
+  final bool hazirMi;
+
+  /// Kurulum basarisizsa **kullaniciya gosterilecek** cumle. Ham teknik
+  /// metin degil; ne yapabilecegini anlatir.
+  final String? hata;
+
+  const MotorDurumu.hazirlaniyor()
+      : hazirMi = false,
+        hata = null;
+
+  const MotorDurumu.hazir()
+      : hazirMi = true,
+        hata = null;
+
+  const MotorDurumu.kurulamadi(String this.hata) : hazirMi = false;
+
+  bool get kurulamadiMi => hata != null;
+
+  /// Beklemeye devam etmenin anlami var mi?
+  bool get bekleniyorMu => !hazirMi && hata == null;
+}
+
 /// Ilerleme bildirimi. Motor calisirken bunu tekrar tekrar cagirir.
 typedef IlerlemeBildirimi = void Function(
   IsDurumu durum,
@@ -36,14 +73,16 @@ typedef IlerlemeBildirimi = void Function(
 /// Arayuz sayesinde Asama 2'de **ekran kodlarinin tek satiri degismeyecek**;
 /// yalnizca hangi motorun kuruldugu degisecek.
 abstract class IndirmeMotoru {
-  /// Motor calismaya hazir mi?
+  /// Motorun acilis durumu.
   ///
   /// Gercek motorda ilk acilista gomulu Python ve ffmpeg ikililerinin
-  /// acilmasi birkac saniye suruyor. O sirada gelen her cagri hata doner —
-  /// bu yuzden arayuz once buraya bakip kullaniciyi bekletiyor. Sahte
-  /// motorda kisa bir taklit gecikmesi var ki bekleme ekrani tarayicida da
-  /// denenebilsin.
-  Future<bool> hazirMi();
+  /// acilmasi birkac saniye suruyor; bu sirada gelen her cagri hata doner.
+  /// Kurulum tamamen basarisiz da olabiliyor — arayuz ikisini ayirt
+  /// edebilsin diye [MotorDurumu] donuyor, duz `bool` degil.
+  ///
+  /// Sahte motorda kisa bir taklit gecikmesi var ki bekleme ekrani
+  /// tarayicida da denenebilsin.
+  Future<MotorDurumu> durum();
 
   /// Adrese bakip ne oldugunu soyler. Henuz indirme yok.
   ///

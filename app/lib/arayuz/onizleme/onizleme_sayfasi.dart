@@ -71,18 +71,38 @@ class _OnizlemeSayfasiState extends State<OnizlemeSayfasi> {
   /// Bekleme **yalnizca gerektiginde** goruluyor: motor zaten hazirsa
   /// `hazirMi()` aninda `true` donuyor ve ekran dogrudan iskelete geciyor.
   Future<void> _baslat() async {
-    if (await widget.motor.hazirMi()) {
+    final ilk = await widget.motor.durum();
+    if (!mounted) return;
+
+    if (ilk.hazirMi) {
       await _cozumle();
       return;
     }
 
-    if (!mounted) return;
-    setState(() => _motorBekleniyor = true);
+    // Kurulum bastan basarisizsa beklemenin anlami yok; sebep hemen
+    // gosteriliyor.
+    if (ilk.kurulamadiMi) {
+      setState(() => _hata = ilk.hata);
+      return;
+    }
 
-    await MotorHazirlik.bekle(widget.motor, devamEdilsinMi: () => mounted);
+    setState(() {
+      _hata = null;
+      _motorBekleniyor = true;
+    });
+
+    final sonuc = await MotorHazirlik.bekle(
+      widget.motor,
+      devamEdilsinMi: () => mounted,
+    );
     if (!mounted) return;
 
     setState(() => _motorBekleniyor = false);
+
+    if (sonuc.kurulamadiMi) {
+      setState(() => _hata = sonuc.hata);
+      return;
+    }
 
     // Sinir dolup motor yine hazir olmadiysa bile deneniyor: motorun kendi
     // hata mesaji, belirsiz bir beklemeden daha bilgilendirici.

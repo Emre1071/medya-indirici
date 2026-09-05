@@ -34,9 +34,24 @@ class SahteMotor implements IndirmeMotoru {
   /// Iptal istenen islerin kimlikleri. [indir] her adimda buraya bakiyor.
   final Set<String> _iptalEdilenler = {};
 
+  /// `true` yapilirsa motor kurulamamis gibi davraniyor.
+  ///
+  /// Kurulum hatasi ekrani tarayicida da gorulebilsin diye. Gercek motorda
+  /// bu hal en cok "yanlis mimari icin derlenmis APK" durumunda yasaniyor
+  /// ve o telefonu elde tutmadan denenemiyor.
+  static bool kurulumuBozukTaklitEt = false;
+
   @override
-  Future<bool> hazirMi() async {
-    return DateTime.now().difference(_acilis) >= _hazirlanmaSuresi;
+  Future<MotorDurumu> durum() async {
+    if (kurulumuBozukTaklitEt) {
+      return const MotorDurumu.kurulamadi(
+        'İndirme motoru başlatılamadı (sahte motor denemesi).',
+      );
+    }
+    if (DateTime.now().difference(_acilis) >= _hazirlanmaSuresi) {
+      return const MotorDurumu.hazir();
+    }
+    return const MotorDurumu.hazirlaniyor();
   }
 
   @override

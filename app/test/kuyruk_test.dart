@@ -180,7 +180,7 @@ class _KontrolluMotor implements IndirmeMotoru {
   Completer<MedyaBilgisi>? _cozumleme;
 
   @override
-  Future<bool> hazirMi() async => true;
+  Future<MotorDurumu> durum() async => const MotorDurumu.hazir();
 
   @override
   Future<MedyaBilgisi> cozumle(String adres) {

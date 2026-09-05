@@ -32,6 +32,16 @@ import java.util.concurrent.Executors
  * tasiniyor: `MethodChannel.Result` ve `EventChannel.EventSink` yalnizca
  * oradan cagrilabilir.
  *
+ * ## Hatalar `Throwable` olarak yakalaniyor, `Exception` olarak degil
+ * Bu dosyadaki her cagri gomulu bir ikiliye gidiyor. Ikili acilamadiginda
+ * JVM `UnsatisfiedLinkError` firlatiyor ve o bir **`Error`**, `Exception`
+ * degil — `catch (Exception)` onu KACIRIR. Havuz is parcaciginda
+ * yakalanmayan bir Throwable ise surecin tamamini oldurur.
+ *
+ * Bu yuzden buradaki yakalamalar bilerek `Throwable`. Kural: **motorun
+ * cokmesi uygulamayi cokertmez.** Kullanici en kotu ihtimalle "motor
+ * calismiyor" mesaji gorur, kapanan bir uygulama degil.
+ *
  * ## Ilerleme neden ayri kanaldan?
  * MethodChannel tek soru-tek cevap icin. Indirme boyunca onlarca ilerleme
  * bildirimi geliyor; bunlar EventChannel'dan akiyor ve her bildirim hangi
@@ -74,7 +84,14 @@ class MotorKopru(private val baglam: Context) {
      * (yer yok, ikili acilamadi). Basarisizsa her cagri anlamli bir hata
      * donuyor; sessizce calismamis gibi yapmiyor.
      */
+    // @Volatile SART: bu iki alan havuz is parcaciginda YAZILIP ana is
+    // parcaciginda OKUNUYOR. Isaretlenmezse ana is parcacigi eski degeri
+    // onbellekten okuyabiliyor ve motor hazir oldugu halde arayuz sonsuza
+    // kadar "hazirlaniyor" gosterebiliyor.
+    @Volatile
     private var hazir = false
+
+    @Volatile
     private var kurulumHatasi: String? = null
 
     fun kur() {
@@ -84,11 +101,21 @@ class MotorKopru(private val baglam: Context) {
                 FFmpeg.getInstance().init(baglam)
                 hazir = true
                 Log.i(ETIKET, "Motor hazir")
-            } catch (h: YoutubeDLException) {
-                kurulumHatasi = h.message
-                Log.e(ETIKET, "Motor kurulamadi", h)
-            } catch (h: Exception) {
-                kurulumHatasi = h.message
+            } catch (h: Throwable) {
+                // `Exception` DEGIL `Throwable` yakalaniyor.
+                //
+                // Gomulu ikili acilamadiginda JVM `UnsatisfiedLinkError`
+                // firlatiyor ve o bir `Error`, `Exception` degil. Yalnizca
+                // `Exception` yakalanirsa hata buradan KACIYOR; havuz is
+                // parcaciginda yakalanmayan bir Throwable ise Android'in
+                // varsayilan isleyicisine gidip **surecin tamamini
+                // olduruyor**. Uygulama acilir acilmaz kapaniyor ve
+                // kullanici "Sürekli durduruluyor" uyarisi goruyor.
+                //
+                // Motor kurulamasa bile uygulama ayakta kalmali: kullanici
+                // gecmisine bakabilmeli, ayarlari acabilmeli ve en onemlisi
+                // NEDEN calismadigini gorebilmeli.
+                kurulumHatasi = h.message ?: h.toString()
                 Log.e(ETIKET, "Motor kurulamadi", h)
             }
         }
@@ -97,7 +124,12 @@ class MotorKopru(private val baglam: Context) {
     fun kanallariBagla(mesajci: BinaryMessenger) {
         MethodChannel(mesajci, KOMUT_KANALI).setMethodCallHandler { cagri, cevap ->
             when (cagri.method) {
-                "hazirMi" -> cevap.success(hazir)
+                // Yalnizca "hazir mi" yetmiyor: kurulum BASARISIZ da
+                // olabiliyor ve o durumda arayuzun sonsuza kadar beklemek
+                // yerine sebebi gostermesi gerekiyor.
+                "motorDurumu" -> cevap.success(
+                    mapOf("hazir" to hazir, "hata" to kurulumHatasi)
+                )
                 "motorSurumu" -> motorSurumu(cevap)
                 "cozumle" -> {
                     val adres = cagri.argument<String>("adres")
@@ -143,7 +175,7 @@ class MotorKopru(private val baglam: Context) {
         havuz.execute {
             val surum = try {
                 YoutubeDL.getInstance().version(baglam)
-            } catch (h: Exception) {
+            } catch (h: Throwable) {
                 null
             }
             anaIsParcacigi.post { cevap.success(surum) }
@@ -156,7 +188,7 @@ class MotorKopru(private val baglam: Context) {
                 val sonuc = YoutubeDL.getInstance()
                     .updateYoutubeDL(baglam, YoutubeDL.UpdateChannel.STABLE)
                 anaIsParcacigi.post { cevap.success(sonuc?.name) }
-            } catch (h: Exception) {
+            } catch (h: Throwable) {
                 anaIsParcacigi.post {
                     cevap.error("GUNCELLEME_HATASI", h.message, null)
                 }
@@ -180,7 +212,7 @@ class MotorKopru(private val baglam: Context) {
 
         val durduruldu = try {
             YoutubeDL.getInstance().destroyProcessById(isKimlik)
-        } catch (h: Exception) {
+        } catch (h: Throwable) {
             Log.w(ETIKET, "Surec durdurulamadi: $isKimlik", h)
             false
         }
@@ -235,7 +267,7 @@ class MotorKopru(private val baglam: Context) {
                 )
 
                 anaIsParcacigi.post { cevap.success(sonuc) }
-            } catch (h: Exception) {
+            } catch (h: Throwable) {
                 Log.e(ETIKET, "Cozumleme hatasi: $adres", h)
                 anaIsParcacigi.post {
                     cevap.error("COZUMLEME_HATASI", h.message, null)
@@ -322,7 +354,7 @@ class MotorKopru(private val baglam: Context) {
                         )
                     }
                 }
-            } catch (h: Exception) {
+            } catch (h: Throwable) {
                 // Iptal de buraya dusuyor: surec olduruldugunde `execute`
                 // istisna firlatiyor. Ayrimi `iptalEdilenler` yapiyor.
                 val iptalMi = iptalEdilenler.remove(isKimlik)
@@ -366,7 +398,7 @@ class MotorKopru(private val baglam: Context) {
                     Log.i(ETIKET, "Yarim dosya silindi: ${dosya.name}")
                 }
             }
-        } catch (h: Exception) {
+        } catch (h: Throwable) {
             // Temizlik basarisiz olsa da kullanici acisindan is bitti;
             // hata gostermek anlamsiz olurdu.
             Log.w(ETIKET, "Yarim dosyalar silinemedi", h)

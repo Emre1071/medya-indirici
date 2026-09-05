@@ -6,10 +6,10 @@
 > **Yetki sırası:** `PLAN.md` (ürün kararları) → `notlar/KARARLAR.md` (kilitli
 > kararlar) → `notlar/ELENENLER.md` (kapanmış tartışmalar) → bu dosya.
 > Çelişki varsa yetkili dosya kazanır; burası yalnız **özet ve yön** verir.
-> Son güncelleme: 2026-09-05 (**Aşama 4 bitti** — paylaş menüsü
-> entegrasyonu, §4.3; öncesinde v0.1.0 yayınlandı ve imza anahtarı §11-§12,
-> dağıtım GitHub Releases'e taşındı §5, iptal mekanizması, MediaStore ve
-> ilk APK derlemesi §10).
+> Son güncelleme: 2026-09-05 (**telefonda ilk deneme: çöküyordu** — motor
+> hatası uygulamayı öldürüyordu, §4.4; öncesinde Aşama 4 paylaş menüsü
+> §4.3, v0.1.0 ve imza anahtarı §11-§12, dağıtım GitHub Releases'e taşındı
+> §5, iptal ve MediaStore, derleme engeli §10).
 
 ---
 
@@ -239,6 +239,11 @@ dosya/görsel paylaşımını ve kendi yaşam döngüsünü de getiriyor; bize g
 tek şey `text/plain`. `PaylasimKoprusu.kt` 60 satır ve zaten var olan
 MethodChannel kalıbına oturuyor — projenin bağımlılık çizgisi bu.
 
+⚠️ **v0.1.0'da bu özellik YOK.** Release, Aşama 4'ten önce alınmıştı;
+telefonda paylaş menüsünde görünmemesinin sebebi manifest hatası değil,
+kurulu APK'nın eski olmasıydı. Paylaş menüsünü denemek için **yeni bir APK
+kurmak şart.**
+
 **Manifest:** `ACTION_SEND` + `category.DEFAULT` + `text/plain`.
 `*/*` **bilerek yazılmadı** — fotoğraf, PDF, kişi kartı paylaşımında da
 listede çıkmak, indiremeyeceği şeyler için menüyü kirletmek olurdu.
@@ -312,6 +317,56 @@ bekleme görünmüyor**, doğrudan iskelete geçiyor. Değilse "Motor
 hazırlanıyor…" durumu çıkıyor ve hazır olur olmaz çözümleme kendiliğinden
 başlıyor. "Tekrar dene" düğmesi de `_baslat`'a bağlı — hazırlık durumunu
 yeniden kontrol etsin diye.
+
+### 4.4 🔴 Motor hatası uygulamayı ÖLDÜRMEZ
+
+Telefonda ilk denemede uygulama açılır açılmaz çöküyordu ("Sürekli
+durduruluyor"). Bulunan kesin açık:
+
+```kotlin
+} catch (h: Exception) {   // ← YANLIŞ
+```
+
+Gömülü ikili açılamadığında JVM **`UnsatisfiedLinkError`** fırlatıyor ve o
+bir `Error`, `Exception` **değil** — `catch (Exception)` onu kaçırıyor.
+Havuz iş parçacığında yakalanmayan bir `Throwable` ise Android'in varsayılan
+işleyicisine gidip **sürecin tamamını öldürüyor.** Yani motor açılamazsa
+uygulama açılır açılmaz kapanıyor.
+
+**Kural: motorun çökmesi uygulamayı çökertmez.** `MotorKopru` ve
+`MedyaKaydedici` içindeki her yakalama artık `Throwable`; `MainActivity`'nin
+açılış adımları da tek tek sarmalanmış. En kötü ihtimalle kullanıcı "motor
+çalışmıyor" mesajı görür, kapanan bir uygulama değil.
+
+⚠️ Bu dosyalarda `catch (Exception)` yazma — hepsi gömülü ikiliye giden
+çağrılar.
+
+**`@Volatile` eklendi:** `hazir` ve `kurulumHatasi` havuz iş parçacığında
+yazılıp ana iş parçacığında okunuyordu. İşaretlenmezse ana iş parçacığı
+eski değeri önbellekten okuyabiliyor ve motor hazır olduğu halde arayüz
+sonsuza kadar "hazırlanıyor" gösterebiliyor.
+
+#### Hata artık ekranda
+
+`hazirMi() → bool` yerine `durum() → MotorDurumu` geldi. Düz `bool` iki hâli
+ayırt edemiyordu:
+
+| Hâl | Arayüz |
+|---|---|
+| `hazirlaniyor` | sarı şerit + dönen çark, beklemek doğru |
+| `hazir` | — |
+| `kurulamadi` | **kırmızı şerit + sebep**, beklemenin anlamı yok |
+
+`MotorHazirlik.bekle` kurulum başarısız olur olmaz vazgeçiyor — eskiden motor
+hiç açılmayacak olsa bile 30 saniye yoklanıyor, kullanıcı da uygulamanın
+takıldığını sanıyordu.
+
+`YtDlpMotoru._kurulumHatasiCevir` ham hatayı yapılabilir bir şeye çeviriyor.
+En olası sebep **yanlış mimari**: telefonun işlemcisine uymayan APK
+kurulmuşsa gömülü ikili açılamıyor, o yüzden mesaj "arm64 sürümünü kur"
+diyor.
+
+`SahteMotor.kurulumuBozukTaklitEt = true` ile bu ekran tarayıcıda denenebilir.
 
 ### `MotorKopru.kt` — neden böyle yazıldı
 

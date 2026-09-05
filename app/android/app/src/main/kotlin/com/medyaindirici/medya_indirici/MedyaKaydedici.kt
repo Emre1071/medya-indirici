@@ -73,7 +73,7 @@ class MedyaKaydedici(private val baglam: Context) {
             } else {
                 eskiKaydet(kaynak, sesMi)
             }
-        } catch (h: Exception) {
+        } catch (h: Throwable) {
             // Cikarma basarisiz: dosya yerinde kaliyor, indirme kaybolmuyor.
             Log.e(ETIKET, "Dosya disari cikarilamadi: ${kaynak.name}", h)
             Sonuc(kaynak.absolutePath, null)
@@ -108,7 +108,7 @@ class MedyaKaydedici(private val baglam: Context) {
                 put(MediaStore.MediaColumns.IS_PENDING, 0)
             }
             cozucu.update(adres, bitir, null, null)
-        } catch (h: Exception) {
+        } catch (h: Throwable) {
             // Yarim kalan kayit siliniyor; birakilirsa oynaticilarda
             // acilmayan bos bir sarki olarak gorunurdu.
             cozucu.delete(adres, null, null)
@@ -156,7 +156,7 @@ class MedyaKaydedici(private val baglam: Context) {
             try {
                 val adres = baglam.contentResolver.insert(koleksiyon, degerler)
                 if (adres != null) return adres
-            } catch (h: Exception) {
+            } catch (h: Throwable) {
                 // Yalnizca ad cakismasi bekleniyor; dongu bir sonraki adi
                 // deneyecek. Son denemede de olmazsa cagiran taraf hata alir.
                 Log.w(ETIKET, "Kayit acilamadi ($ad), yeni ad denenecek", h)
