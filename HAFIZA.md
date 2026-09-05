@@ -492,3 +492,62 @@ yazılır, derleme orada koşar. Bu bir çözüm değil, ölçüm yöntemi.
 ### Ortam
 - Android SDK: `C:\dev\tools\android-sdk` (`android/local.properties`)
 - NDK 28.2.13676358, Gradle derlemesi ~90 sn
+
+---
+
+## 11. GitHub kurulumu — nerede kaldı
+
+| Adım | Durum |
+|---|---|
+| Yerel git deposu (`main`) | ✅ kuruldu, ilk commit atıldı |
+| `.gitignore` (APK, `local.properties`, `Planlama_MP3.txt`) | ✅ |
+| GitHub CLI (`gh` 2.100.0) | ✅ kuruldu — `C:\Program Files\GitHub CLI\gh.exe` |
+| `gh auth login` | ❌ **Yahya yapacak** — tarayıcı/token onayı gerekiyor |
+| Uzak depo + push | ❌ oturumu bekliyor |
+| İlk release (`v0.1.0` + APK'lar) | ❌ |
+
+⚠️ `gh` PATH'e yeni eklendi; **açık olan terminal onu görmez.** Yeni bir
+terminal açılmalı ya da tam yol kullanılmalı.
+
+### Oturum açıldıktan sonra çalıştırılacaklar
+
+```powershell
+gh auth login          # tarayıcıdan onay — bunu Yahya yapar
+
+cd "C:\Users\eavci\OneDrive\Masaüstü\My programs\Work\Müzik\MedyaIndirici"
+gh repo create medya-indirici --public --source=. --remote=origin --push
+```
+
+⚠️ **Depo adı ve hesap koda gömülü.** `lib/cekirdek/github_ayarlari.dart`
+içinde `sahip = 'Emre1071'`, `depo = 'medya-indirici'`. Başka bir ad ya da
+`piriteknoloji` hesabı seçilirse **o dosya da değişmeli**, yoksa uygulama
+güncellemeyi hiç bulamaz (sessizce "güncel" der).
+
+### Release yayınlama akışı
+
+APK derlemesi Türkçe karakterli yoldan çalışmıyor (§10), o yüzden derleme
+ASCII bir yolda yapılır:
+
+```powershell
+# 1) Sürüm numarasını yükselt: pubspec.yaml + lib/cekirdek/surum.dart
+#    (ikisi ayrışırsa surum_test.dart kırmızı yanar)
+C:\flutter\bin\flutter test
+
+# 2) ASCII bir yolda derle
+C:\flutter\bin\flutter build apk --release --split-per-abi `
+    --target-platform android-arm,android-arm64
+
+# 3) Release olustur — etiket 'v' ile baslar, istemci onu temizliyor
+gh release create v0.1.0 `
+    build\app\outputs\flutter-apk\app-arm64-v8a-release.apk `
+    build\app\outputs\flutter-apk\app-armeabi-v7a-release.apk `
+    --title "v0.1.0" --notes "Değişiklik notu — kullanıcıya bu metin görünür"
+```
+
+🔑 **Release notu doğrudan kullanıcıya gösteriliyor** (Ayarlar ekranında,
+`body` alanından). Teknik commit dökümü değil, "ne değişti" cümlesi yazılmalı.
+
+🔴 **Release imzası hâlâ debug anahtarıyla.** Farklı anahtarla imzalanmış
+APK, kurulu uygulamanın üzerine kurulamaz — ilk gerçek release'ten önce
+kalıcı bir imza anahtarı üretilmeli, yoksa sonraki her güncelleme
+"uygulamayı kaldır, yeniden kur" gerektirir.
