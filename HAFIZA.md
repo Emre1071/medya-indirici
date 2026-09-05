@@ -6,9 +6,10 @@
 > **Yetki sırası:** `PLAN.md` (ürün kararları) → `notlar/KARARLAR.md` (kilitli
 > kararlar) → `notlar/ELENENLER.md` (kapanmış tartışmalar) → bu dosya.
 > Çelişki varsa yetkili dosya kazanır; burası yalnız **özet ve yön** verir.
-> Son güncelleme: 2026-09-05 (sürüm dağıtımı Supabase'den **GitHub
-> Releases**'e taşındı — §5; öncesinde iptal mekanizması, MediaStore, motor
-> hazırlık durumu ve ilk APK derlemesi — §10 derleme engeli).
+> Son güncelleme: 2026-09-05 (**v0.1.0 yayınlandı** — kalıcı imza anahtarı
+> üretildi ve ilk GitHub release'i açıldı, §11; öncesinde dağıtım
+> Supabase'den GitHub Releases'e taşındı §5, iptal mekanizması, MediaStore,
+> motor hazırlık durumu ve ilk APK derlemesi §10).
 
 ---
 
@@ -279,9 +280,10 @@ eski cihaz için. `YtDlpMotoru({this.mp3Zorla = false})`.
 - `youtubedl-android` sürümü: **0.18.1** (library + ffmpeg).
 - FileProvider yetkilisi: `${applicationId}.dosyalar`,
   yollar `android/app/src/main/res/xml/dosya_yollari.xml`.
-- ⚠️ `buildTypes.release` hâlâ **debug anahtarıyla** imzalıyor (kodda TODO).
-  Aşama 7'de gerçek imza yapılandırması gerekiyor — yoksa "güncellemeyi kur"
-  akışı imza uyuşmazlığından reddedilir.
+- ✅ `buildTypes.release` **kalıcı upload anahtarıyla** imzalıyor
+  (§12). `key.properties` yoksa debug anahtarına düşüyor ve uyarı basıyor —
+  depoyu klonlayan biri derleyebilsin ama ürettiği APK'nın dağıtılamayacağını
+  görsün diye.
 
 ---
 
@@ -376,7 +378,7 @@ Sonuç: **uygulamada artık hiçbir anahtar durmuyor.**
 | **4** Paylaş menüsü | ❌ başlanmadı — `receive_sharing_intent` yok, `ACTION_SEND` filtresi manifestte yok |
 | **5** MediaStore + bildirim + arka plan | 🔶 **MediaStore yazıldı ✅** (§4.1) — bildirim ve arka planda indirme yok |
 | **6** Kuyruk / geçmiş / ayarlar cilası | 🔶 kuyruk, geçmiş ve **iptal** var; kalıcı kayıt (sqflite) yok, "Aç/Paylaş" gerçek dosya açmıyor |
-| **7** Kendini güncelleme | 🔶 istemci tarafı **bitti** (GitHub Releases); depo açılıp ilk release yayınlanmadı, release imzası yok |
+| **7** Kendini güncelleme | ✅ **bitti** — depo açıldı, kalıcı imza anahtarı üretildi, **v0.1.0 yayında** (§11, §12). Zincir API üzerinden uçtan uca doğrulandı |
 | **8** Facebook/TikTok/kapalı hesap | ❌ (`kaynakBul` zaten tanıyor, gerisi yok) |
 
 ### Sıradaki iş
@@ -386,11 +388,10 @@ sınanacaklar: motorun açılması, çözümleme, indirme, **iptal**, dosyanın
 müzik çalarda görünmesi.
 
 ### Açık kalan kararlar (Yahya'da)
-1. **GitHub deposunun açılması** — `gh` kurulu değil, oturum gerekiyor (§11)
+1. **Keystore yedeği** (§12) — tek kopya diskte duruyor, kaybı geri dönüşsüz
 2. **Projenin ASCII bir yola taşınması** (§10) — derleme için şart
-3. Release imza anahtarı (Aşama 7 buna bağlı; imzasız APK güncellemesi
-   kurulmaz)
-4. Uygulama ikonu (`ic_launcher` hâlâ Flutter varsayılanı)
+3. Uygulama ikonu (`ic_launcher` hâlâ Flutter varsayılanı)
+4. armeabi-v7a APK'sı da release'e eklensin mi (şu an yalnız arm64 yayında)
 
 ---
 
@@ -495,33 +496,31 @@ yazılır, derleme orada koşar. Bu bir çözüm değil, ölçüm yöntemi.
 
 ---
 
-## 11. GitHub kurulumu — nerede kaldı
+## 11. GitHub deposu ve release
 
 | Adım | Durum |
 |---|---|
-| Yerel git deposu (`main`) | ✅ kuruldu, ilk commit atıldı |
-| `.gitignore` (APK, `local.properties`, `Planlama_MP3.txt`) | ✅ |
-| GitHub CLI (`gh` 2.100.0) | ✅ kuruldu — `C:\Program Files\GitHub CLI\gh.exe` |
-| `gh auth login` | ❌ **Yahya yapacak** — tarayıcı/token onayı gerekiyor |
-| Uzak depo + push | ❌ oturumu bekliyor |
-| İlk release (`v0.1.0` + APK'lar) | ❌ |
+| Yerel git deposu (`main`) | ✅ |
+| `.gitignore` (APK, anahtarlar, `local.properties`, `Planlama_MP3.txt`) | ✅ |
+| GitHub CLI (`gh` 2.100.0) + oturum (`Emre1071`) | ✅ |
+| Uzak depo — **github.com/Emre1071/medya-indirici** (public) | ✅ push edildi |
+| Kalıcı imza anahtarı | ✅ §12 |
+| **İlk release `v0.1.0` + arm64 APK** | ✅ yayında |
 
-⚠️ `gh` PATH'e yeni eklendi; **açık olan terminal onu görmez.** Yeni bir
-terminal açılmalı ya da tam yol kullanılmalı.
+Release: <https://github.com/Emre1071/medya-indirici/releases/tag/v0.1.0>
 
-### Oturum açıldıktan sonra çalıştırılacaklar
+**Zincir uçtan uca doğrulandı** (uygulamanın gittiği API'ye sorularak):
+`tag_name = v0.1.0` · taslak/ön-sürüm değil · Türkçe notlar bozulmamış ·
+`app-arm64-v8a-release.apk` istemcinin arm64 süzgecine takılıyor ·
+indirme adresi çözülüyor.
 
-```powershell
-gh auth login          # tarayıcıdan onay — bunu Yahya yapar
-
-cd "C:\Users\eavci\OneDrive\Masaüstü\My programs\Work\Müzik\MedyaIndirici"
-gh repo create medya-indirici --public --source=. --remote=origin --push
-```
+`Surum.simdiki` de `0.1.0` olduğu için uygulama "güncel" diyor — ilk
+release'te olması gereken davranış, sahte güncelleme uyarısı çıkmıyor.
 
 ⚠️ **Depo adı ve hesap koda gömülü.** `lib/cekirdek/github_ayarlari.dart`
-içinde `sahip = 'Emre1071'`, `depo = 'medya-indirici'`. Başka bir ad ya da
-`piriteknoloji` hesabı seçilirse **o dosya da değişmeli**, yoksa uygulama
-güncellemeyi hiç bulamaz (sessizce "güncel" der).
+içinde `sahip = 'Emre1071'`, `depo = 'medya-indirici'`. Depo taşınır veya
+yeniden adlandırılırsa **o dosya da değişmeli**, yoksa uygulama güncellemeyi
+hiç bulamaz (sessizce "güncel" der).
 
 ### Release yayınlama akışı
 
@@ -547,7 +546,60 @@ gh release create v0.1.0 `
 🔑 **Release notu doğrudan kullanıcıya gösteriliyor** (Ayarlar ekranında,
 `body` alanından). Teknik commit dökümü değil, "ne değişti" cümlesi yazılmalı.
 
-🔴 **Release imzası hâlâ debug anahtarıyla.** Farklı anahtarla imzalanmış
-APK, kurulu uygulamanın üzerine kurulamaz — ilk gerçek release'ten önce
-kalıcı bir imza anahtarı üretilmeli, yoksa sonraki her güncelleme
-"uygulamayı kaldır, yeniden kur" gerektirir.
+✅ **İmza artık kalıcı anahtarla** (§12) — derleme makinesinde
+`android/key.properties` durduğu sürece ek bir şey yapmak gerekmiyor.
+
+---
+
+## 12. 🔑 İmza anahtarı (keystore)
+
+| | |
+|---|---|
+| Dosya | `C:\Users\eavci\AnahtarDeposu\medya-indirici-upload.jks` |
+| Tür / boyut | PKCS12 · RSA 4096 · 10.000 gün geçerli |
+| Takma ad | `medya-indirici` |
+| Sertifika | `CN=Medya Indirici, O=Piri Teknoloji, C=TR` |
+| SHA-256 | `78:62:DC:EE:A0:FC:7D:0D:2E:8D:F3:9E:EF:0C:54:EB:0F:13:B7:02:B5:73:8A:E5:50:59:84:2F:74:35:EF:5D` |
+| Parolalar | `app/android/key.properties` içinde (repoda **yok**) |
+
+### 🔴 Bu anahtar kaybedilirse geri dönüşü yok
+
+Android, bir uygulamanın güncellemesini **yalnızca aynı anahtarla**
+imzalanmışsa kabul ediyor. Anahtar giderse:
+
+- Yeni sürüm yayınlansa bile kurulmaz ("uygulama zaten yüklü" hatası).
+- Tek çıkış yolu kullanıcının uygulamayı **kaldırıp yeniden kurması** —
+  indirme geçmişi ve ayarları gider.
+
+**Şu an tek kopya bu diskte.** Yedeklenmeli: keystore dosyası **ve**
+`key.properties` (parolasız keystore işe yaramaz) birlikte, repo dışında
+bir yere.
+
+### Neden depo ağacının dışında
+
+`.gitignore` zaten `*.jks`, `*.keystore` ve `key.properties` satırlarını
+içeriyor (hem kökte hem `app/android/.gitignore`'da). Ama anahtar bir kez
+sızarsa geri alınamaz — public depoda git geçmişinden temizlemek bile
+yetmez, çünkü çekilmiş olabilir. İki savunma hattı: dosya ağacın dışında
+**ve** desenler yok sayılıyor.
+
+### Gradle nasıl bağlı
+
+`android/app/build.gradle.kts` başında `key.properties` okunuyor,
+`signingConfigs.release` oradan besleniyor. **Dosya yoksa debug anahtarına
+düşülüyor ve derlemede uyarı basılıyor** — depoyu klonlayan biri (anahtarı
+olmayan) yine derleyip deneyebilsin, ama ürettiği APK'nın dağıtılamayacağını
+görsün diye. Sessizce debug'a düşmek en kötüsü olurdu.
+
+### İmzayı doğrulama
+
+`keytool -printcert -jarfile` **boş döner** — modern APK'lar v1 (JAR) ile
+değil v2 şemasıyla imzalanıyor. Doğru araç `apksigner`:
+
+```powershell
+& "C:\dev\tools\android-sdk\build-tools\36.0.0\apksigner.bat" `
+    verify --print-certs -v <apk yolu>
+```
+
+Beklenen: `Signer #1 certificate DN: CN=Medya Indirici, O=Piri Teknoloji, C=TR`.
+`CN=Android Debug` görürsen APK **dağıtılamaz**, `key.properties` okunmamış.
