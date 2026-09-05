@@ -46,6 +46,15 @@ class MainActivity : FlutterActivity() {
      */
     private lateinit var motor: MotorKopru
 
+    /**
+     * Paylas menusunden gelen linki tasiyan kopru.
+     *
+     * `configureFlutterEngine`'den ONCE, `onCreate`'te olusturuluyor:
+     * uygulama paylasimla acildiginda niyet daha Flutter baslamadan
+     * elimizde oluyor ve kaybolmamasi icin hemen saklanmasi gerekiyor.
+     */
+    private val paylasim = PaylasimKoprusu()
+
     companion object {
         /** Depolama izni istegini tanimak icin; cevabi ayrica islemiyoruz. */
         private const val DEPOLAMA_IZIN_KODU = 1071
@@ -53,7 +62,20 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        paylasim.acilistakiIntent(intent)
         eskiAndroidDepolamaIzniniIste()
+    }
+
+    /**
+     * Uygulama aciKken gelen paylasim buraya dusuyor.
+     *
+     * `setIntent` cagrisi Android'in beklentisi: sonradan `intent`'i okuyan
+     * kod eskisini degil bunu gormeli.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        paylasim.yeniIntent(intent)
     }
 
     /**
@@ -91,6 +113,8 @@ class MainActivity : FlutterActivity() {
         motor = MotorKopru(applicationContext)
         motor.kur()
         motor.kanallariBagla(flutterEngine.dartExecutor.binaryMessenger)
+
+        paylasim.kanallariBagla(flutterEngine.dartExecutor.binaryMessenger)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, kanalAdi)
             .setMethodCallHandler { cagri, cevap ->

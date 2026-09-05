@@ -55,6 +55,29 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+
+            <!-- PAYLAS MENUSUNDE GORUNMEK
+
+                 Instagram/YouTube "Paylaş" dediginde uygulama listede
+                 cikiyor. Paylasilan sey duz metin olarak geliyor: cogu
+                 zaman aciklama + link birlikte, o yuzden linki ayiklamak
+                 gerekiyor (cekirdek/baglanti.dart).
+
+                 `text/plain` YETIYOR: Instagram ve YouTube gonderiyi
+                 metin olarak paylasiyor, dosya olarak degil. `*/*` yazmak
+                 uygulamayi her turlu paylasimda (fotograf, PDF, kisi
+                 karti) listede gostermek olurdu — indiremeyecegi seyler
+                 icin de cikan bir uygulama menuyu kirletir.
+
+                 DIKKAT: Bu filtrenin calismasi yukaridaki
+                 `launchMode="singleTop"` ayarina bagli. Olmasaydi her
+                 paylasimda uygulamanin ikinci bir kopyasi acilir ve
+                 `onNewIntent` hic tetiklenmezdi. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

@@ -4,6 +4,7 @@ import '../../alan/varliklar/indirme_isi.dart';
 import '../../alan/varliklar/medya_bilgisi.dart';
 import '../../cekirdek/tema.dart';
 import '../../servisler/indirme_motoru.dart';
+import '../../servisler/motor_hazirlik.dart';
 import '../ortak/kapak_gorseli.dart';
 import '../ortak/kaynak_rozeti.dart';
 
@@ -44,6 +45,9 @@ class _OnizlemeSayfasiState extends State<OnizlemeSayfasi> {
   MedyaBilgisi? _bilgi;
   String? _hata;
 
+  /// Motorun acilmasi bekleniyor mu?
+  bool _motorBekleniyor = false;
+
   /// Kullanicinin elle sectigi kaliteler. `null` ise "onerileni kullan".
   MedyaKalitesi? _secilenSes;
   MedyaKalitesi? _secilenVideo;
@@ -51,7 +55,38 @@ class _OnizlemeSayfasiState extends State<OnizlemeSayfasi> {
   @override
   void initState() {
     super.initState();
-    _cozumle();
+    _baslat();
+  }
+
+  /// Once motorun hazir olmasini bekler, sonra cozumler.
+  ///
+  /// ## Nicin bekleme gerekiyor
+  /// Bu sayfa paylas menusunden **dogrudan** aciliyor ve o an uygulama
+  /// yeni baslamis oluyor: gomulu Python/ffmpeg ikilileri hala aciliyor
+  /// olabiliyor. Beklemeden cozumlemeye kalkisilsa motor
+  /// `MOTOR_HAZIR_DEGIL` hatasi doner ve kullanici, asil akisin ilk
+  /// adiminda kirmizi bir hata ekraniyla karsilasirdi — uygulama bozuk
+  /// gorunurdu. Oysa yapmasi gereken tek sey birkac saniye beklemek.
+  ///
+  /// Bekleme **yalnizca gerektiginde** goruluyor: motor zaten hazirsa
+  /// `hazirMi()` aninda `true` donuyor ve ekran dogrudan iskelete geciyor.
+  Future<void> _baslat() async {
+    if (await widget.motor.hazirMi()) {
+      await _cozumle();
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() => _motorBekleniyor = true);
+
+    await MotorHazirlik.bekle(widget.motor, devamEdilsinMi: () => mounted);
+    if (!mounted) return;
+
+    setState(() => _motorBekleniyor = false);
+
+    // Sinir dolup motor yine hazir olmadiysa bile deneniyor: motorun kendi
+    // hata mesaji, belirsiz bir beklemeden daha bilgilendirici.
+    await _cozumle();
   }
 
   Future<void> _cozumle() async {
@@ -100,6 +135,7 @@ class _OnizlemeSayfasiState extends State<OnizlemeSayfasi> {
 
   Widget _govde() {
     if (_hata != null) return _hataGorunumu(_hata!);
+    if (_motorBekleniyor) return const _MotorBekleniyor();
     if (_bilgi == null) return const _Iskelet();
     return _hazirGorunum(_bilgi!);
   }
@@ -134,7 +170,7 @@ class _OnizlemeSayfasiState extends State<OnizlemeSayfasi> {
           ),
           const SizedBox(height: 20),
           FilledButton.icon(
-            onPressed: _cozumle,
+            onPressed: _baslat,
             icon: const Icon(Icons.refresh),
             label: const Text('Tekrar dene'),
           ),
@@ -392,6 +428,56 @@ class _BuyukDugme extends StatelessWidget {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Motor acilirken gosterilen bekleme durumu.
+///
+/// ## Nicin iskelet degil de bu?
+/// Iskelet "veri birazdan gelecek" demek ve saniyeler icinde dolacagi
+/// varsayimina dayaniyor. Motor kurulumu ise ilk acilista daha uzun
+/// surebiliyor. Dolmayan bir iskelet takilmis izlenimi verir; burada ne
+/// beklendigi acikca yaziliyor ve bunun **bir kerelik** oldugu soyleniyor,
+/// cunku kullanici bunu yalnizca uygulamayi ilk actiginda gorecek.
+class _MotorBekleniyor extends StatelessWidget {
+  const _MotorBekleniyor();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(
+            width: 34,
+            height: 34,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.6,
+              valueColor: AlwaysStoppedAnimation(Renkler.vurgu),
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'Motor hazırlanıyor…',
+            style: TextStyle(
+              fontSize: Olculer.baslik,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'İlk açılışta birkaç saniye sürer.\nHazır olunca bağlantı '
+            'kendiliğinden çözümlenecek.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: Olculer.kucukBilgi,
+              color: Renkler.metinSolgun,
+              height: 1.4,
+            ),
+          ),
         ],
       ),
     );

@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../../cekirdek/baglanti.dart';
 import '../../cekirdek/tema.dart';
 import '../../servisler/guncelleme_servisi.dart';
 import '../../servisler/indirme_motoru.dart';
 import '../../servisler/kuyruk_yoneticisi.dart';
+import '../../servisler/motor_hazirlik.dart';
+import '../../servisler/paylasim_dinleyici.dart';
 import '../ana/ana_ekran.dart';
 import '../ayarlar/ayarlar_ekrani.dart';
 import '../indirilenler/indirilenler_ekrani.dart';
@@ -46,40 +51,73 @@ class _AnaKabukState extends State<AnaKabuk> {
   /// burada tutulup ekranlara veriliyor.
   bool _motorHazir = false;
 
+  final PaylasimDinleyici _paylasim = PaylasimDinleyici();
+  StreamSubscription<String>? _paylasimAbonesi;
+
   @override
   void initState() {
     super.initState();
     _guncellemeyeBak();
     _motoruBekle();
+
+    // Ilk karenin cizilmesi bekleniyor: paylasimla acildiginda onizleme
+    // sayfasi hemen aciliyor ve `Navigator` ancak agac kuruldugunda
+    // kullanilabilir oluyor.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _paylasimiDinle());
   }
 
-  /// Motor hazir olana kadar araliklarla soruyor.
+  /// Paylas menusunden gelen linkleri karsilar.
   ///
-  /// ## Nicin yoklama (polling)?
-  /// Android tarafi "hazir oldum" diye kendiliginden haber vermiyor;
-  /// kurulum `MainActivity` icinde uygulama acilirken basliyor ve bitisi
-  /// bir kanal olayina baglanmis degil. Tek bir bayrak icin ayri bir
-  /// EventChannel acmak yerine saniyede birden az sikliktaki bu yoklama
-  /// yeterli — bekleme zaten birkac saniye suruyor.
+  /// Iki kaynak da ayni yere akiyor: uygulama paylasimla **acildiysa**
+  /// bekleyen metin, **aciksa** olay akisi. Ayrimi Android tarafi yapiyor
+  /// (`PaylasimKoprusu.kt`); burasi ikisini de ayni sekilde isliyor.
+  Future<void> _paylasimiDinle() async {
+    final ilk = await _paylasim.ilkPaylasim();
+    if (!mounted) return;
+    if (ilk != null) _paylasimdanAc(ilk);
+
+    _paylasimAbonesi = _paylasim.akis.listen((metin) {
+      if (mounted) _paylasimdanAc(metin);
+    });
+  }
+
+  /// Paylasilan ham metinden linki cikarip onizlemeyi acar.
   ///
-  /// Ust sinir var: motor kurulumu **basarisiz da olabiliyor** (yer yok,
-  /// ikili acilamadi). Sonsuza kadar sormak, ekranda sonsuza kadar
-  /// "hazırlanıyor" yazmasi demek olurdu. Sinir dolunca hazir kabul
-  /// ediliyor ve gercek sebep motorun kendi hata mesajindan geliyor.
-  static const int _hazirlikDenemeSiniri = 40; // ~30 saniye
+  /// Gelen sey temiz bir link degil: Instagram aciklama metniyle birlikte
+  /// yolluyor (bkz. [Baglanti]).
+  void _paylasimdanAc(String hamMetin) {
+    final adres = Baglanti.ayikla(hamMetin);
 
-  Future<void> _motoruBekle() async {
-    for (var deneme = 0; deneme < _hazirlikDenemeSiniri; deneme++) {
-      if (!mounted) return;
-
-      if (await widget.motor.hazirMi()) {
-        if (!mounted) return;
-        setState(() => _motorHazir = true);
-        return;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 750));
+    if (adres == null) {
+      // Kullanici bir sey paylasti ama icinde link yok — ornegin duz bir
+      // yorum metni. Sessiz kalmak "uygulama acildi ve hicbir sey olmadi"
+      // demek olurdu.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Paylaşılan metinde bir bağlantı bulunamadı.'),
+        ),
+      );
+      return;
     }
 
+    // Ust uste paylasim yapilirsa onizleme sayfalari birikmesin: her
+    // seferinde koke donuluyor. Aksi halde geri tusu eski gonderilerin
+    // arasinda gezdirirdi.
+    Navigator.of(context).popUntil((rota) => rota.isFirst);
+    _onizlemeyiAc(adres);
+  }
+
+  /// Motor hazir olana kadar bekleyip uyari seridini kaldirir.
+  ///
+  /// Bekleme mantigi [MotorHazirlik]'te — ayni is onizleme sayfasinda da
+  /// gerekiyor. Sinir dolup motor hazir olmasa bile serit kaldiriliyor:
+  /// gercek sebep motorun kendi hata mesajindan gelsin, ekranda sonsuza
+  /// kadar "hazırlanıyor" yazmasin.
+  Future<void> _motoruBekle() async {
+    await MotorHazirlik.bekle(
+      widget.motor,
+      devamEdilsinMi: () => mounted,
+    );
     if (!mounted) return;
     setState(() => _motorHazir = true);
   }
@@ -97,6 +135,7 @@ class _AnaKabukState extends State<AnaKabuk> {
 
   @override
   void dispose() {
+    _paylasimAbonesi?.cancel();
     _kuyruk.dispose();
     super.dispose();
   }

@@ -6,10 +6,10 @@
 > **Yetki sırası:** `PLAN.md` (ürün kararları) → `notlar/KARARLAR.md` (kilitli
 > kararlar) → `notlar/ELENENLER.md` (kapanmış tartışmalar) → bu dosya.
 > Çelişki varsa yetkili dosya kazanır; burası yalnız **özet ve yön** verir.
-> Son güncelleme: 2026-09-05 (**v0.1.0 yayınlandı** — kalıcı imza anahtarı
-> üretildi ve ilk GitHub release'i açıldı, §11; öncesinde dağıtım
-> Supabase'den GitHub Releases'e taşındı §5, iptal mekanizması, MediaStore,
-> motor hazırlık durumu ve ilk APK derlemesi §10).
+> Son güncelleme: 2026-09-05 (**Aşama 4 bitti** — paylaş menüsü
+> entegrasyonu, §4.3; öncesinde v0.1.0 yayınlandı ve imza anahtarı §11-§12,
+> dağıtım GitHub Releases'e taşındı §5, iptal mekanizması, MediaStore ve
+> ilk APK derlemesi §10).
 
 ---
 
@@ -38,8 +38,8 @@
 | `notlar/ELENENLER.md` | Değerlendirilip vazgeçilen 5 yol — aynı tartışmayı tekrar açma |
 | `app/` | Flutter projesi (Android + ekran önizlemesi için web) |
 | `app/lib/` | Dart kodu (§3) |
-| `app/android/.../kotlin/` | `MainActivity.kt` + `MotorKopru.kt` — gömülü motor köprüsü (§4) |
-| `app/test/` | `surum_test.dart` · `kuyruk_test.dart` (iptal) · `surum_kaynagi_test.dart` (GitHub) |
+| `app/android/.../kotlin/` | `MainActivity.kt` · `MotorKopru.kt` (motor) · `MedyaKaydedici.kt` (MediaStore) · `PaylasimKoprusu.kt` (paylaş menüsü) |
+| `app/test/` | `surum_test.dart` · `kuyruk_test.dart` (iptal) · `surum_kaynagi_test.dart` (GitHub) · `baglanti_test.dart` (link ayıklama) |
 
 ✅ **Bu klasör artık bir git deposu** (`main` dalı, 2026-09-05).
 Uzak depo: **`Emre1071/medya-indirici`** — **public**.
@@ -62,7 +62,8 @@ lib/
 ├── cekirdek/
 │   ├── tema.dart              Renkler + Olculer tokenları, koyuTema()
 │   ├── surum.dart             Surum.simdiki (ELLE) + sayısal karşılaştırma
-│   └── github_ayarlari.dart   sahip/depo + releases/latest adresi
+│   ├── github_ayarlari.dart   sahip/depo + releases/latest adresi
+│   └── baglanti.dart          paylaşılan ham metinden linki ayıklar
 ├── alan/varliklar/            saf veri: medya_bilgisi, indirme_isi,
 │                              indirme_sonucu, surum_bilgisi
 ├── servisler/
@@ -71,6 +72,8 @@ lib/
 │   ├── ytdlp_motoru.dart      gerçek motor — MethodChannel/EventChannel
 │   ├── kuyruk_yoneticisi.dart ChangeNotifier, sırayla işletir
 │   ├── guncelleme_servisi.dart "yeni sürüm var mı?" — asla hata fırlatmaz
+│   ├── motor_hazirlik.dart    motor açılana kadar bekleme (ortak)
+│   ├── paylasim_dinleyici.dart paylaş menüsünden gelen metin
 │   └── apk_kurucu.dart        APK indir → Android kurulum ekranı
 ├── veri/uzak/surum_kaynagi.dart  http ile GitHub releases/latest
 └── arayuz/
@@ -171,6 +174,8 @@ değildi. `indir()` imzası kimliği zorunlu alıyor.
 | `medyaindirici/motor` | MethodChannel | `hazirMi`, `motorSurumu`, `cozumle`, `indir`, `motoruGuncelle`, `iptal` |
 | `medyaindirici/motor/ilerleme` | EventChannel | `{isKimlik, oran, kalanSaniye, satir}` |
 | `medyaindirici/kurulum` | MethodChannel | `kurulumIzniVarMi`, `izinEkraniniAc`, `apkKur` |
+| `medyaindirici/paylasim` | MethodChannel | `ilkPaylasim` — açılışta bekleyen paylaşım metni |
+| `medyaindirici/paylasim/akis` | EventChannel | uygulama açıkken gelen paylaşımlar |
 
 İlerleme akışı **tek ve paylaşılan** (`YtDlpMotoru._paylasilanAkis`); işler
 `isKimlik` ile ayrışıyor. `indir` artık düz yol değil
@@ -208,15 +213,105 @@ galeride **görünmez** — kullanıcı açısından indirme hiç olmamış gibi
 
 ### 4.2 Motor hazırlık durumu
 
-`AnaKabuk` açılışta `hazirMi()`'yi 750 ms aralıklarla yokluyor (üst sınır
-~30 sn, sonra hazır kabul ediyor — kurulum başarısız da olabiliyor ve
-ekranda sonsuza kadar "hazırlanıyor" yazmasın diye).
+Bekleme mantığı **`servisler/motor_hazirlik.dart`**'ta (750 ms aralık, üst
+sınır ~30 sn). İki yerden çağrılıyor: `AnaKabuk`'un uyarı şeridi ve
+paylaş menüsünden açılan `OnizlemeSayfasi`.
 
 - **Yoklama, çünkü** Android tarafı "hazır oldum" diye haber vermiyor; tek
   bir bayrak için ayrı EventChannel açmaya değmez.
+- **Üst sınır var, çünkü** kurulum başarısız da olabiliyor (yer yok, ikili
+  açılamadı). Sınır dolunca vazgeçilip **yine de devam ediliyor** — motorun
+  kendi Türkçe hata mesajı, sonsuza kadar "hazırlanıyor" yazan bir
+  ekrandan çok daha bilgilendirici.
+- `devamEdilsinMi` geri çağrısı `mounted` ile besleniyor: kapanmış bir
+  ekran için 30 saniye yoklamaya devam etmek boşuna.
 - Hazır değilken `AnaEkran`'da uyarı şeridi var ve "Çözümle" engelleniyor
   (yazılan adres kutuda kalıyor). **Engelleyici tam ekran yok:** bekleme
   birkaç saniye, kullanıcı bu sırada geçmişe/ayarlara bakabilmeli.
+
+### 4.3 Paylaş menüsü entegrasyonu (Aşama 4)
+
+Instagram/YouTube → **Paylaş** → *Medya İndirici* → doğrudan önizleme.
+Planın hedeflediği **üç dokunuş** akışı artık kapalı.
+
+**Paket eklenmedi.** `receive_sharing_intent` aynı işi yapıyor ama iOS'u,
+dosya/görsel paylaşımını ve kendi yaşam döngüsünü de getiriyor; bize gereken
+tek şey `text/plain`. `PaylasimKoprusu.kt` 60 satır ve zaten var olan
+MethodChannel kalıbına oturuyor — projenin bağımlılık çizgisi bu.
+
+**Manifest:** `ACTION_SEND` + `category.DEFAULT` + `text/plain`.
+`*/*` **bilerek yazılmadı** — fotoğraf, PDF, kişi kartı paylaşımında da
+listede çıkmak, indiremeyeceği şeyler için menüyü kirletmek olurdu.
+
+🔴 **`launchMode="singleTop"` bu akışın şartı.** Olmasaydı her paylaşımda
+uygulamanın ikinci bir kopyası açılır ve `onNewIntent` hiç tetiklenmezdi.
+Manifest'te zaten vardı; silinmemeli.
+
+**İki yol var, ikisi de gerekli:**
+
+| Uygulama | Ne oluyor | Nereden geliyor |
+|---|---|---|
+| **Kapalı** (soğuk açılış) | Niyet Flutter başlamadan geliyor, Kotlin tarafında bekletiliyor | `ilkPaylasim` — bir kez teslim edilir |
+| **Açık** (sıcak açılış) | `onNewIntent` tetikleniyor | olay akışı |
+
+Metin okunduğu anda temizleniyor; temizlenmezse aynı gönderi ikinci kez
+önizlemeye düşerdi. Dinleyici henüz bağlanmamışken paylaşım gelirse
+bekletiliyor (`onListen`'de teslim ediliyor) — yoksa araya denk gelen
+paylaşım kaybolurdu.
+
+**Android dışında sessizce boş:** `PaylasimDinleyici.destekleniyor`
+(`kIsWeb` + `defaultTargetPlatform`, motor seçimiyle aynı kalıp). Tarayıcıda
+kanal çağrısı `MissingPluginException` atardı; hiç çağrılmıyor.
+
+#### Link ayıklama (`cekirdek/baglanti.dart`)
+
+🔑 **Gelen şey temiz bir link değil.** Instagram şöyle paylaşıyor:
+
+```
+Şerif Ruç on Instagram: "Hayırlı akşamlar 🎻🎸"
+https://www.instagram.com/reel/DAbC123/?igsh=MXY5aA==
+```
+
+Bu metni olduğu gibi motora vermek "Unsupported URL" ile biter ve kullanıcı
+uygulamanın Instagram'ı desteklemediğini sanır — hatanın kaynağı görünmez.
+
+- **Tanıdık alan adına öncelik.** Açıklamalarda sık sık profil/bağış linki
+  geçiyor ve metinde *önce* geliyor; ilk bulunanı almak yanlış gönderiyi
+  indirmek olurdu.
+- **Tanımadığımız site yine de deneniyor** — yt-dlp bizim listemizden çok
+  daha fazla siteyi tanıyor, asıl kararı o veriyor.
+- **Sondaki noktalama kırpılıyor** (`(bkz. https://…)` → kapanış parantezi).
+  Ama `=` kırpılmıyor: Instagram'ın `?igsh=…==` parametresi eşittirle
+  bitiyor, kırpmak adresi bozar.
+- **Alan denetimi nokta sınırına bakıyor**, düz `contains` değil —
+  `instagram.com.sahte.net` Instagram sayılmamalı.
+- Link yoksa kullanıcıya "Paylaşılan metinde bir bağlantı bulunamadı"
+  deniyor. Sessiz kalmak "uygulama açıldı ve hiçbir şey olmadı" demek olurdu.
+
+`test/baglanti_test.dart` bu kuralların hepsini gerçek paylaşım
+metinleriyle tutuyor.
+
+#### Yönlendirme
+
+`AnaKabuk._paylasimdanAc` linki ayıklayıp önizlemeyi açıyor. Önce
+`popUntil(isFirst)` çağrılıyor: üst üste paylaşım yapılırsa önizleme
+sayfaları birikmesin, geri tuşu eski gönderiler arasında gezdirmesin.
+
+İlk paylaşım `addPostFrameCallback` içinde işleniyor — `Navigator` ancak
+ağaç kurulduktan sonra kullanılabiliyor.
+
+#### Önizlemede motor beklemesi
+
+Paylaşımla açıldığında uygulama **yeni başlamış** oluyor ve motor hâlâ
+açılıyor olabiliyor. Beklemeden çözümlemeye kalkışılsa asıl akışın ilk
+adımında kırmızı bir hata ekranı çıkardı; oysa yapılması gereken tek şey
+birkaç saniye beklemek.
+
+`OnizlemeSayfasi._baslat()` önce `hazirMi()`'ye bakıyor. Hazırsa **hiçbir
+bekleme görünmüyor**, doğrudan iskelete geçiyor. Değilse "Motor
+hazırlanıyor…" durumu çıkıyor ve hazır olur olmaz çözümleme kendiliğinden
+başlıyor. "Tekrar dene" düğmesi de `_baslat`'a bağlı — hazırlık durumunu
+yeniden kontrol etsin diye.
 
 ### `MotorKopru.kt` — neden böyle yazıldı
 
@@ -375,17 +470,24 @@ Sonuç: **uygulamada artık hiçbir anahtar durmuyor.**
 | **1** Ekranlar + sahte veri | ✅ 3 sekme + önizleme + sahte motor çalışıyor (tarayıcıda `flutter run -d chrome`) |
 | **2** Android köprüsü | 🔶 **APK derleniyor ✅ (2026-09-05, ilk kez), cihazda hâlâ DENENMEDİ** — telefonda gerçek indirme yapılmadı |
 | **3** Arayüz ↔ motor | ✅ kod tarafı bağlı (kuyruk → motor → önizleme); gerçek indirme testi Aşama 2 ile birlikte bekliyor |
-| **4** Paylaş menüsü | ❌ başlanmadı — `receive_sharing_intent` yok, `ACTION_SEND` filtresi manifestte yok |
+| **4** Paylaş menüsü | ✅ **bitti** — `ACTION_SEND` filtresi + `PaylasimKoprusu.kt` + link ayıklama (§4.3). Paket eklenmedi |
 | **5** MediaStore + bildirim + arka plan | 🔶 **MediaStore yazıldı ✅** (§4.1) — bildirim ve arka planda indirme yok |
 | **6** Kuyruk / geçmiş / ayarlar cilası | 🔶 kuyruk, geçmiş ve **iptal** var; kalıcı kayıt (sqflite) yok, "Aç/Paylaş" gerçek dosya açmıyor |
 | **7** Kendini güncelleme | ✅ **bitti** — depo açıldı, kalıcı imza anahtarı üretildi, **v0.1.0 yayında** (§11, §12). Zincir API üzerinden uçtan uca doğrulandı |
 | **8** Facebook/TikTok/kapalı hesap | ❌ (`kaynakBul` zaten tanıyor, gerisi yok) |
 
 ### Sıradaki iş
-**Gerçek cihazda ilk indirme** (Aşama 2'nin doğrulanması). APK artık
-derleniyor, yani sıradaki adımın önündeki engel kalktı. Telefonda
-sınanacaklar: motorun açılması, çözümleme, indirme, **iptal**, dosyanın
-müzik çalarda görünmesi.
+**Gerçek cihazda ilk indirme** — hâlâ tek doğrulanmamış nokta ve artık
+biriken iş çok. APK derleniyor ve imzalı, kurulacak sürüm hazır.
+
+Telefonda sınanacaklar (hiçbiri cihazda denenmedi):
+1. Motorun açılması ve "Motor hazırlanıyor…" durumunun geçmesi
+2. Instagram → Paylaş → uygulama listede çıkıyor mu, önizleme açılıyor mu
+3. Çözümleme → indirme → **iptal**
+4. Dosyanın müzik çalarda / galeride görünmesi (MediaStore)
+
+Kalan aşamalar: **5** (bildirim + arka planda indirme) ve **6**
+(kalıcı geçmiş, "Aç/Paylaş").
 
 ### Açık kalan kararlar (Yahya'da)
 1. **Keystore yedeği** (§12) — tek kopya diskte duruyor, kaybı geri dönüşsüz
@@ -441,7 +543,7 @@ müzik çalarda görünmesi.
 
 ```powershell
 C:\flutter\bin\flutter pub get
-C:\flutter\bin\flutter test        # 30 test (surum 7 + kuyruk 8 + surum_kaynagi 15)
+C:\flutter\bin\flutter test        # 46 test (surum 7 + kuyruk 8 + surum_kaynagi 15 + baglanti 16)
 C:\flutter\bin\dart analyze        # temiz olmalı — "No issues found!"
 C:\flutter\bin\flutter run -d chrome --web-port=8099   # SAHTE motor, ekran bakışı
 C:\flutter\bin\flutter run -d <cihaz>                  # telefonda GERÇEK motor
@@ -459,6 +561,8 @@ engel yalnızca APK derlemesinde.
 **Tarayıcıda gerçek indirme olmaz** — orada `SahteMotor` çalışır. Denenebilir
 akışlar: adrese `hata` yazarak hata ekranı, ilk 2,5 saniyede "Motor
 hazırlanıyor…" şeridi, indirme sırasında durdurma düğmesi.
+**Paylaş menüsü tarayıcıda denenemez** — yalnız Android'de çalışıyor
+(§4.3); link ayıklama tarafı testlerle tutuluyor.
 
 Derleme çıktısındaki `llvm-strip: ... not recognized as a valid object file`
 satırları **zararsız** — gömülü `libpython.zip.so` / `libffmpeg.zip.so`
