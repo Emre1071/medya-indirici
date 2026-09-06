@@ -770,8 +770,25 @@ Sonuç: **uygulamada artık hiçbir anahtar durmuyor.**
 
 - Koyu tema, vurgu **mor** (`#9B7BFF`) — DevLingo mavi; ikisi telefonda yan
   yana duracağı için ilk bakışta ayrılmalı.
-- 🔑 **Ses yeşil, video mavi.** Ayrı renk bilinçli: paylaş menüsünden gelen
-  kullanıcı saniyede karar veriyor, kas hafızasıyla doğru düğmeye basmalı.
+- 🔑 **Ses zümrüt/teal (`#2ED3B7`), video mavi.** Ayrı renk bilinçli: paylaş
+  menüsünden gelen kullanıcı saniyede karar veriyor, kas hafızasıyla doğru
+  düğmeye basmalı.
+  ⚠️ **Amber denenmedi/seçilmedi** — `Renkler.uyari` da amber ve kullanıcı
+  turuncuyu "dikkat" diye okumayı öğrendi (motor şeridi, "dışarı
+  çıkarılamadı"). Ses düğmesini o tona çekmek ayrımı bozardı.
+- **Ses ikonu = nota + indirme oku** (`arayuz/ortak/ses_indir_ikonu.dart`).
+  Yalnız nota "burada müzik var" der, eylemi anlatmaz; önizlemedeki karar
+  "ses mi video mu" olduğu için ikon eylemi de taşıyor.
+  - Rozetin oku **zemin renginde**; zemin dışarıdan veriliyor çünkü ikon iki
+    farklı yüzeyde kullanılıyor (düğmenin renkli zemini, kartın düz yüzeyi).
+  - **18 px altında rozet gizleniyor** — iş kartındaki 13 px'lik durum
+    ikonunda ok leke olurdu. Eşik widget'ın içinde; çağıran taraf düşünmüyor.
+  - Oranlar tarayıcıda büyütülüp denendi (rozet `0.56`, ok `0.72`).
+- **Ses düğmesi vurgulu** (`_BuyukDugme.vurgulu`): daha dolu zemin.
+  Uygulamanın asıl işi müzik indirmek; iki düğme eşit ağırlıkta durmamalı.
+- ⚠️ **Etiket "MP3 İndir" DEĞİL, "Ses Olarak İndir".** `mp3Zorla`
+  varsayılan **kapalı** ve indirilen dosya çoğu zaman m4a/opus — "MP3"
+  demek vermediğimiz bir biçimi vaat etmek olurdu (`PLAN.md` §2).
 - `Olculer.buyukDugme = 64` — tek elle, yürürken basılıyor.
 - Ham renk/ölçü yazma; `Renkler` ve `Olculer` sabitlerini kullan.
 - **Telefon çerçevesi `home`'a değil `builder`'a konuldu:** `Navigator.push`

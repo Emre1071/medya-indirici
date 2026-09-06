@@ -16,7 +16,16 @@ class Renkler {
   /// Ses ve video **ayri renkler** — kullanici ekrana bakmadan, kas
   /// hafizasiyla dogru dugmeye basabilsin. Paylas menusunden gelip
   /// saniyede karar verilen bir ekran burasi; okumak zorunda kalmamali.
-  static const ses = Color(0xFF3DDC84);
+  ///
+  /// **Ses zumrut/teal.** Onceki `0xFF3DDC84` (Android yesili) biraz
+  /// soluktu; bu ton koyu zeminde daha net duruyor ve yesil ailesinde
+  /// kaldigi icin alisilmis "ses = yesil" refleksini bozmuyor.
+  ///
+  /// ⚠️ **Amber SECILMEDI.** Muzik cagrisimi acisindan iyi bir aday ama
+  /// [uyari] rengi de amber; kullanici turuncu/sari bir isareti "dikkat"
+  /// diye okumayi ogrendi (motor seridi, "disari cikarilamadi" uyarisi).
+  /// Ses dugmesini ayni tona cekmek o ayrimi bozardi.
+  static const ses = Color(0xFF2ED3B7);
   static const video = Color(0xFF4DA3FF);
 
   static const uyari = Color(0xFFFFB86C);

@@ -7,6 +7,7 @@ import '../../servisler/indirme_motoru.dart';
 import '../../servisler/motor_hazirlik.dart';
 import '../ortak/kapak_gorseli.dart';
 import '../ortak/kaynak_rozeti.dart';
+import '../ortak/ses_indir_ikonu.dart';
 
 /// Uygulamanin **en kritik ekrani**: paylas menusunden gelindiginde
 /// dogrudan burasi aciliyor.
@@ -256,10 +257,13 @@ class _OnizlemeSayfasiState extends State<OnizlemeSayfasi> {
         const SizedBox(height: Olculer.bosluk),
         if (b.sesVar)
           _BuyukDugme(
-            simge: Icons.music_note,
-            baslik: 'Ses İndir',
+            simge: const SesIndirIkonu(zemin: Renkler.arkaPlan),
+            baslik: 'Ses Olarak İndir',
             altBaslik: _altBaslik(_secilenSes ?? b.onerilenSes),
             renk: Renkler.ses,
+            // Uygulamanin asil isi muzik indirmek; ses dugmesi bu yuzden
+            // daha dolu bir zeminle one cikiyor.
+            vurgulu: true,
             basildi: () => _indir(IndirmeTuru.ses),
             kaliteBasildi: b.sesSecenekleri.length > 1
                 ? () => _kaliteSec(b.sesSecenekleri, IndirmeTuru.ses)
@@ -268,7 +272,8 @@ class _OnizlemeSayfasiState extends State<OnizlemeSayfasi> {
         if (b.sesVar && b.videoVar) const SizedBox(height: 10),
         if (b.videoVar)
           _BuyukDugme(
-            simge: Icons.movie_outlined,
+            simge: const Icon(Icons.movie_outlined,
+                color: Renkler.video, size: 26),
             baslik: 'Video İndir',
             altBaslik: _altBaslik(_secilenVideo ?? b.onerilenVideo),
             renk: Renkler.video,
@@ -362,10 +367,18 @@ class _OnizlemeSayfasiState extends State<OnizlemeSayfasi> {
 /// basilinca hicbir sey olmayan bir dugme gostermek, arayuze olan guveni
 /// azaltir.
 class _BuyukDugme extends StatelessWidget {
-  final IconData simge;
+  /// Ikon hazir bir widget olarak geliyor: ses dugmesi tek bir `IconData`
+  /// degil, nota + indirme oku bileskesi kullaniyor ([SesIndirIkonu]).
+  final Widget simge;
+
   final String baslik;
   final String altBaslik;
   final Color renk;
+
+  /// Daha dolu zemin + ince kenarlik. Ses dugmesinde acik: uygulamanin
+  /// asil isi muzik indirmek, iki dugme esit agirlikta durmamali.
+  final bool vurgulu;
+
   final VoidCallback basildi;
   final VoidCallback? kaliteBasildi;
 
@@ -374,19 +387,24 @@ class _BuyukDugme extends StatelessWidget {
     required this.baslik,
     required this.altBaslik,
     required this.renk,
+    this.vurgulu = false,
     required this.basildi,
     this.kaliteBasildi,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Vurgulu dugme daha dolu; ikisi yan yana durdugunda goz once ona
+    // gidiyor. Renkler zaten ayri, bu onun ustune agirlik ekliyor.
+    final zeminYogunluk = vurgulu ? 0.22 : 0.11;
+
     return SizedBox(
       height: Olculer.buyukDugme,
       child: Row(
         children: [
           Expanded(
             child: Material(
-              color: renk.withValues(alpha: 0.14),
+              color: renk.withValues(alpha: zeminYogunluk),
               borderRadius: BorderRadius.horizontal(
                 left: const Radius.circular(Olculer.kose),
                 right: Radius.circular(kaliteBasildi == null ? Olculer.kose : 0),
@@ -398,7 +416,7 @@ class _BuyukDugme extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
                     children: [
-                      Icon(simge, color: renk, size: 26),
+                      simge,
                       const SizedBox(width: 12),
                       Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -431,7 +449,7 @@ class _BuyukDugme extends StatelessWidget {
           if (kaliteBasildi != null) ...[
             const SizedBox(width: 2),
             Material(
-              color: renk.withValues(alpha: 0.14),
+              color: renk.withValues(alpha: zeminYogunluk),
               borderRadius: const BorderRadius.horizontal(
                 right: Radius.circular(Olculer.kose),
               ),

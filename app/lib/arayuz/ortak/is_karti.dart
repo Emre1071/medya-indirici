@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../alan/varliklar/indirme_isi.dart';
 import '../../cekirdek/tema.dart';
 import 'kapak_gorseli.dart';
+import 'ses_indir_ikonu.dart';
 
 /// Kuyrukta ve gecmiste gorunen tek satirlik is karti.
 class IsKarti extends StatelessWidget {
@@ -55,11 +56,21 @@ class IsKarti extends StatelessWidget {
                     const SizedBox(height: 3),
                     Row(
                       children: [
-                        Icon(
-                          sesMi ? Icons.music_note : Icons.movie_outlined,
-                          size: 13,
-                          color: turRengi,
-                        ),
+                        // Ayni ikon standardi burada da gecerli. Bu
+                        // olcekte (13 px) rozet okunmuyor; widget onu
+                        // kendisi gizliyor, cagiran taraf dusunmuyor.
+                        if (sesMi)
+                          const SesIndirIkonu(
+                            boyut: 13,
+                            renk: Renkler.ses,
+                            zemin: Renkler.yuzey,
+                          )
+                        else
+                          const Icon(
+                            Icons.movie_outlined,
+                            size: 13,
+                            color: Renkler.video,
+                          ),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
