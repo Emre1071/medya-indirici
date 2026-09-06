@@ -12,7 +12,7 @@
 /// [simdiki]. Testi calistir, yesilse dogru yapmissin.
 class Surum {
   /// Bu derlemenin surumu. `pubspec.yaml` ile AYNI olmali.
-  static const String simdiki = '0.1.1';
+  static const String simdiki = '0.1.2';
 
   /// `1.0.2` > `1.0.10` gibi metin karsilastirma tuzagina dusmemek icin
   /// parcalar **sayi olarak** kiyaslanir.
