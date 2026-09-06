@@ -403,6 +403,51 @@ kütüphaneler DEFLATE ile sıkıştırılmış (yani kurulumda diske açılıyo
 `libqjs.so` eksiksiz. Cihaz da arm64. **Sorun paketlemede değil,
 çalışma anında.**
 
+### 4.6 🔴 R8 motoru bozuyordu — `proguard-rules.pro`
+
+Cihaz içi tanı raporu kök nedeni verdi:
+
+```
+ExceptionInInitializerError: RuntimeException: class p3.a is not a concrete class
+```
+
+`p3.a` **obfuscate edilmiş** bir sınıf adı. Release derlemesinde R8 sınıf
+ve alan adlarını kısaltıyor; Java çağrıları derleme anında çözüldüğü için
+bu normalde sorun değil. Ama youtubedl-android, yt-dlp'nin JSON çıktısını
+**yansımayla** (reflection) nesneye çeviriyor: sınıfı adıyla arıyor,
+alanları adıyla dolduruyor. Adlar değişince motor hiç açılamıyor.
+
+🔑 **R8 zaten çalışıyordu, bizim kuralımız yoktu.** `isMinifyEnabled`
+hiçbir yerde yazmıyordu ve `proguard-rules.pro` diye bir dosya da yoktu —
+çünkü **Flutter'ın Gradle eklentisi release'de R8'i kendiliğinden açıyor.**
+Görünmüyordu; tek kanıt çökmedeki `p3.a` adıydı.
+
+Asıl eksik `proguardFiles` satırıydı: o olmadan R8 çalışır ama kural
+dosyası **hiç okunmaz**.
+
+⚠️ Bu sessizce bozulabilen bir yapı: `build.gradle.kts`'ten `proguardFiles`
+silinirse derleme **hata vermez**, uygulama telefonda yine bozulur.
+
+#### Doğrulama (artefakt üzerinden)
+
+Kural yazmak yetmez, tuttuğunu görmek gerekir. `mapping.txt` bakıldı:
+
+| | Sonuç |
+|---|---|
+| `YoutubeDL`, `YoutubeDLRequest/Response`, `VideoInfo`, `VideoFormat` | **kimlik eşlemesi** — yeniden adlandırılmamış ✅ |
+| `com.fasterxml.jackson.**` | kimlik eşlemesi ✅ |
+| Diğerleri | 675 sınıf hâlâ kısaltılmış (`a.a`, `b.a`) — R8 çalışmaya devam ediyor |
+
+Yani düzeltme hedefli: yalnız yansımanın gerektirdiği kadarı korunuyor.
+
+#### `mapping.txt` saklanmalı
+
+Obfuscate edilmiş çökme raporunu okumanın tek yolu o derlemeye ait
+`mapping.txt` (10 MB, `build/app/outputs/mapping/release/`). Repoda
+tutulmuyor (`.gitignore`), ama **yayınlanan her sürümün mapping'i o
+release'e ek dosya olarak konmalı** — yoksa kullanıcıdan gelen çökme
+raporu okunamaz.
+
 ### `MotorKopru.kt` — neden böyle yazıldı
 
 - `getInfo`/`execute` **bloklayan** çağrılar → 2 iş parçacıklı havuz.

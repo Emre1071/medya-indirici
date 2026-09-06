@@ -113,6 +113,30 @@ android {
                 // uyari basiliyor ve cikan APK dagitilmiyor.
                 signingConfigs.getByName("debug")
             }
+
+            // ============================================================
+            // R8 ZATEN CALISIYORDU — kurallarimiz devrede DEGILDI
+            //
+            // Flutter'in Gradle eklentisi release derlemesinde R8'i
+            // kendiliginden aciyor. `isMinifyEnabled` hicbir yerde
+            // yazmadigi icin bu gorunmuyordu; ama telefondaki hatada
+            // cikan `p3.a` sinif adi obfuscation'in calistiginin kaniti.
+            //
+            // Asil eksik `proguardFiles` satiriydi: o olmadan R8 calisiyor
+            // ama `proguard-rules.pro` HIC OKUNMUYOR. Yani gomulu motorun
+            // yansimayla (reflection) bulmasi gereken siniflar yeniden
+            // adlandiriliyor ve motor telefonda hic acilamiyordu.
+            //
+            // `isMinifyEnabled` artik acikca yaziliyor: davranis degismedi,
+            // yalnizca gorunur oldu. Kapatilmasi da bir secenek (dex
+            // kuculmesi ~1-2 MB, APK'nin 59 MB'inin yaninda onemsiz) ama
+            // kurallar dogru yazildigi surece acik kalmasinin zarari yok.
+            // ============================================================
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 

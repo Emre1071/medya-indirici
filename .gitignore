@@ -41,3 +41,8 @@ Planlama_MP3.txt
 *.jks
 *.keystore
 key.properties
+
+# R8 esleme dosyasi. Obfuscate edilmis cokme raporlarini cozmek icin sart
+# ama 10 MB ve her derlemede degisiyor — repoda degil, YAYINLANAN
+# SURUMUN yaninda saklanmali (GitHub Release'e ek dosya olarak).
+mapping*.txt
