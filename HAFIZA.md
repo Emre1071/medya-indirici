@@ -428,17 +428,64 @@ dosyası **hiç okunmaz**.
 ⚠️ Bu sessizce bozulabilen bir yapı: `build.gradle.kts`'ten `proguardFiles`
 silinirse derleme **hata vermez**, uygulama telefonda yine bozulur.
 
+#### İkinci tur: asıl suçlu commons-compress'ti
+
+İlk kurallar (youtubedl + Jackson) yetmedi. Telefon bu kez şunu verdi:
+
+```
+NoClassDefFoundError: k2.e
+  sebep: ExceptionInInitializerError
+  sebep: RuntimeException: class k2.a is not a concrete class
+```
+
+🔑 **Saklanan `mapping.txt` sayesinde adlar geri çözüldü** — bu, dosyayı
+saklamanın somut karşılığı:
+
+| Obfuscated | Gerçek sınıf |
+|---|---|
+| `k2.e` | `org.apache.commons.compress.archivers.zip.ExtraFieldUtils` |
+| `k2.a` | `org.apache.commons.compress.archivers.zip.AsiExtraField` |
+
+Mekanizma: gömülü Python/ffmpeg APK'ya `.zip.so` olarak giriyor ve ilk
+açılışta **commons-compress** ile açılıyor. `ExtraFieldUtils`'in statik
+başlatıcısı "extra field" sınıflarını `newInstance()` ile üretiyor.
+R8, `AsiExtraField`'in parametresiz kurucusunu *kimse çağırmıyor* sanıp
+silmiş — mapping'de o sınıfın **hiçbir üyesi yoktu**. `newInstance()`
+`InstantiationException` atıyor, kütüphane onu *"is not a concrete class"*
+diye yeniden fırlatıyor, statik başlatıcı patlıyor.
+
+Ders: **yansıma kullanan her kütüphane tek tek korunmalı**, ve eksik kural
+yalnızca telefonda ortaya çıkıyor — derleme sessizce başarılı oluyor.
+
 #### Doğrulama (artefakt üzerinden)
 
-Kural yazmak yetmez, tuttuğunu görmek gerekir. `mapping.txt` bakıldı:
+Kural yazmak yetmez, tuttuğunu görmek gerekir. `mapping.txt`'e bakıldı:
 
 | | Sonuç |
 |---|---|
-| `YoutubeDL`, `YoutubeDLRequest/Response`, `VideoInfo`, `VideoFormat` | **kimlik eşlemesi** — yeniden adlandırılmamış ✅ |
+| `YoutubeDL`, `YoutubeDLRequest/Response`, `VideoInfo`, `VideoFormat` | kimlik eşlemesi ✅ |
 | `com.fasterxml.jackson.**` | kimlik eşlemesi ✅ |
+| `ExtraFieldUtils`, `AsiExtraField` (+ `<init>()` kurucusu) | kimlik eşlemesi ✅ |
 | Diğerleri | 675 sınıf hâlâ kısaltılmış (`a.a`, `b.a`) — R8 çalışmaya devam ediyor |
 
 Yani düzeltme hedefli: yalnız yansımanın gerektirdiği kadarı korunuyor.
+
+#### R8'i kapatmak da geçerli bir seçenek — ölçüldü
+
+| | APK |
+|---|---|
+| R8 açık (kurallarla) | **59,46 MB** |
+| R8 kapalı | 61,92 MB |
+| Kazanç | **2,46 MB** (%4) |
+
+Açık bırakıldı, ama bu 2,46 MB'ın karşılığı her yansıma kullanan kütüphane
+için kural yazma yükümlülüğü. Üçüncü bir kırılma yaşanırsa kapatmak
+savunulabilir: `isMinifyEnabled = false` **ve** `isShrinkResources = false`.
+
+⚠️ **İkisi birbirine bağlı.** Yalnız minify kapatılırsa Gradle
+*"Removing unused resources requires unused code shrinking to be turned on"*
+deyip durur. Flutter ikisini de kendiliğinden açıyordu; artık
+`build.gradle.kts`'te açıkça yazılılar.
 
 #### `mapping.txt` saklanmalı
 

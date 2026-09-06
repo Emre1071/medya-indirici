@@ -132,7 +132,21 @@ android {
             // kuculmesi ~1-2 MB, APK'nin 59 MB'inin yaninda onemsiz) ama
             // kurallar dogru yazildigi surece acik kalmasinin zarari yok.
             // ============================================================
+            // Flutter ikisini de kendiliginden aciyordu; acikca yaziliyorlar
+            // ki gorunur olsunlar.
+            //
+            // ⚠️ IKISI BIRBIRINE BAGLI: `isMinifyEnabled` kapatilirsa
+            // `isShrinkResources` da kapatilmali, yoksa Gradle
+            // "Removing unused resources requires unused code shrinking to
+            // be turned on" deyip derlemeyi durduruyor.
+            //
+            // Kapatmak gecerli bir secenek: olculdu, R8'in kazandirdigi
+            // 2,46 MB (59,5 -> 61,9 MB). Buna karsilik her yansima kullanan
+            // kutuphane icin kural yazmak gerekiyor ve eksik kural yalnizca
+            // TELEFONDA, calisma aninda ortaya cikiyor — derleme sessizce
+            // basarili oluyor. Kurallar dogru oldugu surece acik kalsin.
             isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

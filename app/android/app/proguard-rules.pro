@@ -35,6 +35,22 @@
 -keep class com.yausername.** { *; }
 -dontwarn com.yausername.**
 
+# --- Zip acici --------------------------------------------------------
+# Gomulu Python ve ffmpeg APK'ya `.zip.so` olarak giriyor ve ilk acilista
+# commons-compress ile aciliyor.
+#
+# `ExtraFieldUtils` statik baslaticisinda "extra field" siniflarini
+# YANSIMAYLA uretiyor (`newInstance()`). R8 bu kuruculari kimse
+# cagirmiyor sanip siliyor, `newInstance()` InstantiationException
+# firlatiyor ve kutuphane onu su mesajla yeniden firlatiyor:
+#
+#   class k2.a is not a concrete class
+#
+# Telefonda goruldu; `k2.a` = AsiExtraField, `k2.e` = ExtraFieldUtils.
+# Kuruculari korumak sart.
+-keep class org.apache.commons.compress.** { *; }
+-dontwarn org.apache.commons.compress.**
+
 # --- JSON cozumleyici -------------------------------------------------
 # youtubedl-android, yt-dlp ciktisini Jackson ile okuyor. Jackson bastan
 # sona yansimayla calisiyor.
