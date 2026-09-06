@@ -900,9 +900,17 @@ yazılır, derleme orada koşar. Bu bir çözüm değil, ölçüm yöntemi.
 | GitHub CLI (`gh` 2.100.0) + oturum (`Emre1071`) | ✅ |
 | Uzak depo — **github.com/Emre1071/medya-indirici** (public) | ✅ push edildi |
 | Kalıcı imza anahtarı | ✅ §12 |
-| **İlk release `v0.1.0` + arm64 APK** | ✅ yayında |
+| **Yayındaki sürüm: `v0.1.1`** | ✅ APK + `mapping.txt` ekli |
 
-Release: <https://github.com/Emre1071/medya-indirici/releases/tag/v0.1.0>
+Release: <https://github.com/Emre1071/medya-indirici/releases/tag/v0.1.1>
+
+⚠️ **`v0.1.0` bozuk** — R8 düzeltmelerinden önce alınmıştı, açılır açılmaz
+çöküyor. Kimseye o link verilmemeli. (Silinmedi: tarihî kayıt, ve
+`releases/latest` zaten yalnız en yenisini döndürüyor.)
+
+🔑 **`mapping.txt` artık release'e ek dosya olarak konuyor.** Obfuscate
+edilmiş bir çökme raporunu okumanın tek yolu o sürüme ait mapping. Bir kez
+işe yaradı (§4.6: `k2.e` → `ExtraFieldUtils`); her yayında konmalı.
 
 **Zincir uçtan uca doğrulandı** (uygulamanın gittiği API'ye sorularak):
 `tag_name = v0.1.0` · taslak/ön-sürüm değil · Türkçe notlar bozulmamış ·
@@ -931,12 +939,19 @@ C:\flutter\bin\flutter test
 C:\flutter\bin\flutter build apk --release --split-per-abi `
     --target-platform android-arm,android-arm64
 
-# 3) Release olustur — etiket 'v' ile baslar, istemci onu temizliyor
-gh release create v0.1.0 `
+# 3) Release olustur — etiket 'v' ile baslar, istemci onu temizliyor.
+#    mapping.txt DE eklenir: coku raporlarini cozmenin tek yolu.
+gh release create v0.1.1 `
     build\app\outputs\flutter-apk\app-arm64-v8a-release.apk `
-    build\app\outputs\flutter-apk\app-armeabi-v7a-release.apk `
-    --title "v0.1.0" --notes "Değişiklik notu — kullanıcıya bu metin görünür"
+    build\app\outputs\mapping\release\mapping.txt `
+    --title "v0.1.1" --notes-file notlar.md
 ```
+
+⚠️ **`versionCode` artmak ZORUNDA**, yoksa Android güncellemeyi kurmaz.
+`--split-per-abi` ona mimariye göre önek ekliyor: arm64 için
+`2 * 1000 + yapı numarası`, yani `0.1.0+1` → **2001**, `0.1.1+2` → **2002**.
+Tek APK'ya (universal) geçilirse versionCode `2` olur ve **2002'den küçük
+kaldığı için kurulum reddedilir** — o gün bu hesap hatırlanmalı.
 
 🔑 **Release notu doğrudan kullanıcıya gösteriliyor** (Ayarlar ekranında,
 `body` alanından). Teknik commit dökümü değil, "ne değişti" cümlesi yazılmalı.
