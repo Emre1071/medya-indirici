@@ -10,10 +10,10 @@
 > 🔒 **Bu dosya işle birlikte güncellenir** — her kritik değişiklik, hata
 > çözümü ve sürüm yükseltmesinden sonra. Kuralın tamamı §8 başında.
 >
-> Son güncelleme: 2026-09-06 — **uygulama telefonda çalışıyor.** Motor
-> açılıyor, paylaş menüsü ve çözümleme doğrulandı. İndirme tarafındaki
-> düzeltmeler (§4.7 sessiz video, §4.8 dosya/geçmiş) yazıldı ama **cihazda
-> henüz denenmedi**; **v0.1.1 yayında** (§11) ve OTA ile kurulması bekleniyor.
+> Son güncelleme: 2026-09-06 — **OTA güncelleme cihazda doğrulandı**
+> (v0.1.1 telefona kendi kendine kuruldu). **v0.1.2 yayında** (ses ikonu +
+> zümrüt/teal renk, §6). Geriye kalan tek doğrulanmamış alan **indirme
+> sonrası akış**: sesli video §4.7, dosya galeride + geçmiş §4.8.
 > Öncesi: R8 §4.6, çökme §4.4-§4.5, paylaş menüsü §4.3, imza anahtarı §12,
 > derleme engeli §10.
 
@@ -813,7 +813,7 @@ Sonuç: **uygulamada artık hiçbir anahtar durmuyor.**
 | **4** Paylaş menüsü | ✅ **bitti ve cihazda doğrulandı** — Instagram/YouTube → Paylaş → önizleme açılıyor (§4.3) |
 | **5** MediaStore + bildirim + arka plan | 🔶 **MediaStore yazıldı** (§4.1, §4.8) — cihazda henüz doğrulanmadı; bildirim ve arka planda indirme yok |
 | **6** Kuyruk / geçmiş / ayarlar cilası | 🔶 kuyruk, geçmiş, **iptal** var; kalıcı kayıt (sqflite) yok, "Aç/Paylaş" gerçek dosya açmıyor |
-| **7** Kendini güncelleme | ✅ **bitti** — imza anahtarı, **v0.1.1 yayında** (§11, §12). OTA akışı cihazda henüz denenmedi |
+| **7** Kendini güncelleme | ✅ **bitti ve cihazda doğrulandı** — v0.1.1 OTA ile kuruldu; **v0.1.2 yayında** (§11, §12) |
 | **8** Facebook/TikTok/kapalı hesap | ❌ (`kaynakBul` zaten tanıyor, gerisi yok) |
 
 ### Cihazda ne doğrulandı, ne doğrulanmadı
@@ -830,13 +830,20 @@ Uzun süre hiçbir şey telefonda çalışmamıştı; artık ayrım net tutulmal
 | **Sesli video** | ❓ §4.7'den sonra denenmedi |
 | **İndirme geçmişi** | ❓ §4.8'den sonra denenmedi |
 | **İptal** | ❓ hiç denenmedi |
-| **OTA güncelleme** (indir + kur) | ❓ hiç denenmedi — v0.1.1 tam bunun için yayınlandı |
+| **OTA güncelleme** (indir + kur) | ✅ **v0.1.1 telefona OTA ile kuruldu** (2026-09-06) — kontrol, indirme, izin ve kurulum adımlarının tamamı çalışıyor |
 
 ### Sıradaki iş
-**v0.1.1'i telefonda OTA ile kurmak.** Cihazdaki sürüm `0.1.0`, yayındaki
-`0.1.1` → uygulama güncellemeyi kendisi teklif ediyor. Bu hem OTA yolunu
-ilk kez sınıyor hem de yukarıdaki bütün "denenmedi" satırlarını tek
-oturumda kapatacak sürümü cihaza getiriyor.
+**İndirme tarafını cihazda doğrulamak.** OTA çalıştığı için v0.1.1/v0.1.2
+telefonda; yani §4.7 (sesli video) ve §4.8 (dosya galeride + geçmiş)
+düzeltmeleri artık *denenebilir* durumda ama **hâlâ denenmedi**. Sırasıyla:
+
+1. YouTube videosu indir → **sesi var mı**
+2. Instagram Reels indir → dosya **Movies/Medya İndirici**'de mi, galeride
+   görünüyor mu
+3. İndirilen öğe **geçmiş listesinde** mi
+4. Süren indirmeyi **durdur** → gerçekten kesiliyor mu
+
+Sorun çıkarsa: hatalı karta dokun → teknik ayrıntı → kopyala (§4.8).
 
 Kalan aşamalar: **5** (bildirim + arka planda indirme) ve **6**
 (kalıcı geçmiş, "Aç/Paylaş").
@@ -994,9 +1001,13 @@ yazılır, derleme orada koşar. Bu bir çözüm değil, ölçüm yöntemi.
 | GitHub CLI (`gh` 2.100.0) + oturum (`Emre1071`) | ✅ |
 | Uzak depo — **github.com/Emre1071/medya-indirici** (public) | ✅ push edildi |
 | Kalıcı imza anahtarı | ✅ §12 |
-| **Yayındaki sürüm: `v0.1.1`** | ✅ APK + `mapping.txt` ekli |
+| **Yayındaki sürüm: `v0.1.2`** | ✅ APK + `mapping.txt` ekli |
 
-Release: <https://github.com/Emre1071/medya-indirici/releases/tag/v0.1.1>
+Release: <https://github.com/Emre1071/medya-indirici/releases/tag/v0.1.2>
+
+✅ **OTA yolu çalışıyor** — v0.1.1 telefona bu yolla kuruldu (2026-09-06).
+Sürüm geçmişi: `v0.1.0` (bozuk) → `v0.1.1` (çökme + indirme düzeltmeleri)
+→ `v0.1.2` (ses ikonu/renk).
 
 ⚠️ **`v0.1.0` bozuk** — R8 düzeltmelerinden önce alınmıştı, açılır açılmaz
 çöküyor. Kimseye o link verilmemeli. (Silinmedi: tarihî kayıt, ve
