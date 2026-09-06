@@ -180,10 +180,13 @@ class SahteMotor implements IndirmeMotoru {
             boyutBayt: 4 * 1024 * 1024,
           ),
         ],
+        // YouTube'da yuksek cozunurluklu formatlar SESSIZ geliyor (DASH);
+        // yalnizca 720p tek parca. Sahte motor bunu da taklit ediyor ki
+        // ses ekleme mantigi gercekci veriyle denenebilsin.
         videoSecenekleri: const [
           MedyaKalitesi(
             etiket: '1080p',
-            formatKimlik: '137+140',
+            formatKimlik: '137',
             uzanti: 'mp4',
             boyutBayt: 78 * 1024 * 1024,
           ),
@@ -192,10 +195,11 @@ class SahteMotor implements IndirmeMotoru {
             formatKimlik: '22',
             uzanti: 'mp4',
             boyutBayt: 41 * 1024 * 1024,
+            sesIceriyor: true,
           ),
           MedyaKalitesi(
             etiket: '480p',
-            formatKimlik: '135+140',
+            formatKimlik: '135',
             uzanti: 'mp4',
             boyutBayt: 22 * 1024 * 1024,
           ),

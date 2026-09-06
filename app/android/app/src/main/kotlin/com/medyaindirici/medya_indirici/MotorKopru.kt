@@ -54,6 +54,17 @@ class MotorKopru(private val baglam: Context) {
         private const val ETIKET = "MotorKopru"
         const val KOMUT_KANALI = "medyaindirici/motor"
         const val ILERLEME_KANALI = "medyaindirici/motor/ilerleme"
+
+        /**
+         * Instagram'a gonderilen tarayici basligi.
+         *
+         * Instagram tanimadigi istemcilere bazi gonderileri vermiyor ve
+         * "giris yapmayi gerektiriyor" diyor. YALNIZ Instagram'da
+         * kullaniliyor — genel ayarlamak YouTube'u bozar.
+         */
+        const val MASAUSTU_TARAYICI =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 
     /** Indirme ve cozumleme isleri bu havuzda calisiyor. */
@@ -244,6 +255,7 @@ class MotorKopru(private val baglam: Context) {
                 "indir" -> indir(cagri.argument("adres"),
                     cagri.argument("tur"),
                     cagri.argument("formatKimlik"),
+                    cagri.argument("sesIceriyor") ?: false,
                     cagri.argument("isKimlik"),
                     cagri.argument("hedefKlasor"),
                     cagri.argument("mp3Zorla") ?: false,
@@ -346,6 +358,14 @@ class MotorKopru(private val baglam: Context) {
 
                     val kayit = mapOf(
                         "formatKimlik" to f.formatId,
+                        // Bu format kendi icinde ses TASIYOR mu?
+                        //
+                        // YouTube yuksek cozunurluklu videoyu SESSIZ veriyor
+                        // (DASH): `137` = 1080p, ses yok. Bu bilgi tasinmazsa
+                        // indirme `-f 137` olarak gidiyor, tek akis iniyor ve
+                        // ortada birlestirilecek ses olmuyor — video sessiz
+                        // kaydediliyor. Telefonda tam bu yasandi.
+                        "sesVarMi" to sesVar,
                         "uzanti" to f.ext,
                         "boyutBayt" to f.fileSize.takeIf { it > 0 },
                         "etiket" to formatEtiketi(f.formatNote, f.height, f.abr, goruntuVar),
@@ -381,10 +401,43 @@ class MotorKopru(private val baglam: Context) {
         }
     }
 
+    /**
+     * Video indirmede kullanilacak yt-dlp format kurali.
+     *
+     * ## Sessiz video sorunu
+     * YouTube yuksek cozunurluklu videoyu **sessiz** veriyor (DASH):
+     * `137` = 1080p goruntu, ses ayri bir formatta. Secilen kimlik
+     * dogrudan `-f 137` olarak gonderilirse tek akis iniyor ve ortada
+     * birlestirilecek ses olmuyor — `--merge-output-format` bu durumu
+     * kurtaramaz, cunku birlestirecek ikinci parca hic indirilmemistir.
+     *
+     * Cozum: format kendi icinde ses tasimiyorsa `+bestaudio` ekleniyor.
+     * Zaten sesli olan formatlara eklenmiyor — eklenirse dosyaya ikinci
+     * bir ses izi girer.
+     */
+    private fun videoFormatKurali(
+        formatKimlik: String?,
+        sesIceriyor: Boolean,
+    ): String = when {
+        // Kullanici kalite secmedi: en iyi goruntu + en iyi ses, ikisi de
+        // bulunamazsa tek parca gelen en iyi dosya.
+        formatKimlik == null ->
+            "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+
+        // Secilen format zaten sesli (Instagram'da hep boyle).
+        sesIceriyor -> formatKimlik
+
+        // Sessiz goruntu: ses eklenmeli. Once mp4 ile uyumlu m4a deneniyor,
+        // sonra herhangi bir ses, en sonda tek parca yedegi.
+        else ->
+            "$formatKimlik+bestaudio[ext=m4a]/$formatKimlik+bestaudio/best"
+    }
+
     private fun indir(
         adres: String?,
         tur: String?,
         formatKimlik: String?,
+        sesIceriyor: Boolean,
         isKimlik: String?,
         hedefKlasor: String?,
         mp3Zorla: Boolean,
@@ -427,11 +480,23 @@ class MotorKopru(private val baglam: Context) {
                         istek.addOption("-f", formatKimlik ?: "bestaudio/best")
                     }
                 } else {
-                    // Video + ses. yt-dlp gerekiyorsa ikisini ffmpeg ile
-                    // birlestiriyor; Instagram'da tek parca geldigi icin
-                    // birlestirme adimi genelde hic calismiyor.
-                    istek.addOption("-f", formatKimlik ?: "bestvideo+bestaudio/best")
+                    istek.addOption("-f", videoFormatKurali(formatKimlik, sesIceriyor))
+
+                    // Ses ve goruntu ayri indiginde ffmpeg ikisini mp4'te
+                    // birlestiriyor. Tek parca gelen kaynaklarda (Instagram)
+                    // bu adim zaten hic calismiyor.
                     istek.addOption("--merge-output-format", "mp4")
+                }
+
+                // Instagram bazi gonderileri tanimadigi istemcilere
+                // vermiyor ve "giris yapmayi gerektiriyor" diyor.
+                //
+                // Basligi YALNIZ Instagram'a veriyoruz. Genel olarak
+                // ayarlamak YouTube'u bozabilir: YouTube gelen basliga gore
+                // farkli oynatici yaniti donduruyor ve yt-dlp'nin kendi
+                // ayarladigi basligi ezmek yeni kirilmalar uretir.
+                if (adres.contains("instagram", ignoreCase = true)) {
+                    istek.addOption("--user-agent", MASAUSTU_TARAYICI)
                 }
 
                 YoutubeDL.getInstance().execute(istek, isKimlik) { yuzde, kalanSaniye, satir ->

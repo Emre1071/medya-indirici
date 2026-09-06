@@ -495,6 +495,51 @@ tutulmuyor (`.gitignore`), ama **yayınlanan her sürümün mapping'i o
 release'e ek dosya olarak konmalı** — yoksa kullanıcıdan gelen çökme
 raporu okunamaz.
 
+### 4.7 Sessiz video ve Instagram engeli
+
+Motor açıldıktan sonra indirme tarafında iki sorun çıktı.
+
+#### Sessiz video — kök neden format seçiminde
+
+`--merge-output-format mp4` **zaten vardı**; sorun o değildi.
+
+🔑 **YouTube yüksek çözünürlüklü videoyu sessiz veriyor** (DASH): `137` =
+1080p görüntü, ses ayrı bir formatta. Kalite seçiciden gelen kimlik
+doğrudan `-f 137` olarak gönderiliyordu → **tek akış** iniyor →
+birleştirilecek ikinci parça hiç indirilmediği için ffmpeg de bir şey
+yapamıyor. Dosya sessiz kaydediliyordu.
+
+Çözüm: `sesVarMi` bilgisi Kotlin → Dart → Kotlin taşınıyor
+(`MedyaKalitesi.sesIceriyor`) ve `videoFormatKurali()` buna göre karar
+veriyor:
+
+| Durum | Gönderilen format |
+|---|---|
+| Kalite seçilmemiş | `bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best` |
+| Seçilen format zaten sesli (Instagram) | `<id>` — olduğu gibi |
+| Seçilen format sessiz (YouTube DASH) | `<id>+bestaudio[ext=m4a]/<id>+bestaudio/best` |
+
+⚠️ **Zaten sesli formata `+bestaudio` eklenmiyor** — eklenirse dosyaya
+ikinci bir ses izi girer. Ayrım bu yüzden taşınıyor; "hepsine ekle" demek
+kolay ama yanlış.
+
+#### Instagram "giriş yapmayı gerektiriyor"
+
+Üç ayrı önlem:
+
+1. **Takip parametreleri temizleniyor** (`Baglanti.temizle`) — `igsh`,
+   `si`, `stkn`, `utm_*`, `fbclid`… `igsh` bir paylaşım jetonu.
+   ⚠️ `v` (YouTube video kimliği) ve `t` **korunuyor**; onlar içeriği
+   belirliyor, silinirse adres bozulur. Testlerle tutuluyor.
+2. **`--user-agent` yalnız Instagram'a** veriliyor. Genel ayarlamak
+   YouTube'u bozabilir: YouTube gelen başlığa göre farklı oynatıcı yanıtı
+   döndürüyor ve yt-dlp'nin kendi başlığını ezmek yeni kırılmalar üretir.
+3. **Hata mesajı motor güncellemesine yönlendiriyor.** "Giriş gerekiyor"
+   çoğu zaman kapalı hesap değil, eldeki yt-dlp'nin Instagram'ın yeni
+   sayfa yapısını tanımaması. Ayarlar'daki "Motoru güncelle"
+   (`updateYoutubeDL`) zaten vardı; eksik olan kullanıcıyı oraya
+   yönlendirmekti.
+
 ### `MotorKopru.kt` — neden böyle yazıldı
 
 - `getInfo`/`execute` **bloklayan** çağrılar → 2 iş parçacıklı havuz.

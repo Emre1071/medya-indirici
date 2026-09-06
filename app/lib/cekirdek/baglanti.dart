@@ -45,7 +45,35 @@ class Baglanti {
   /// esittir ile bitiyor, onu kirpmak adresi bozar.
   static const String _sondakiNoktalama = '.,;:!?"\'`)]}»>';
 
+  /// Adrese yapisan, icerikle ilgisi olmayan takip parametreleri.
+  ///
+  /// Bunlar paylasan kisiyi ve paylasim yolunu isaretliyor; gonderiyi
+  /// bulmak icin gerekli degiller. Instagram'in `igsh`'i bir **paylasim
+  /// jetonu** ve bazi durumlarda istegi "tanimadigim bir baglantidan
+  /// geldi" konumuna dusuruyor.
+  ///
+  /// ⚠️ Listeye eklerken dikkat: `v` (YouTube video kimligi) ve `t`
+  /// (baslangic saniyesi) gibi parametreler icerigin KENDISINI belirliyor,
+  /// silinirse adres bozulur.
+  static const Set<String> _takipParametreleri = {
+    'igsh',
+    'igshid',
+    'stkn',
+    'si',
+    'feature',
+    'fbclid',
+    'gclid',
+    'share_id',
+    'utm_source',
+    'utm_medium',
+    'utm_campaign',
+    'utm_content',
+    'utm_term',
+  };
+
   /// Ham metinden indirilecek adresi cikarir. Bulunamazsa `null`.
+  ///
+  /// Adres ayrica [temizle] ile takip parametrelerinden arindiriliyor.
   static String? ayikla(String? hamMetin) {
     if (hamMetin == null) return null;
 
@@ -58,13 +86,48 @@ class Baglanti {
     if (adresler.isEmpty) return null;
 
     for (final adres in adresler) {
-      if (tanidikMi(adres)) return adres;
+      if (tanidikMi(adres)) return temizle(adres);
     }
 
     // Tanidik alan yoksa ilk adres deneniyor. Reddetmek yerine denemek
     // dogru: yt-dlp bizim listemizden cok daha fazla siteyi taniyor ve
     // asil karari o veriyor.
-    return adresler.first;
+    return temizle(adresler.first);
+  }
+
+  /// Adresten takip parametrelerini atar.
+  ///
+  /// Cozumlenemeyen adres **oldugu gibi** doner: burada amac temizlemek,
+  /// adresi dogrulamak degil. Ayristirma hatasi yuzunden calisan bir
+  /// baglantiyi elemek yanlis olurdu.
+  static String temizle(String adres) {
+    final u = Uri.tryParse(adres);
+    if (u == null || !u.hasAuthority) return adres;
+    if (u.queryParameters.isEmpty) return adres;
+
+    final kalan = <String, String>{};
+    u.queryParameters.forEach((anahtar, deger) {
+      if (!_takipParametreleri.contains(anahtar.toLowerCase())) {
+        kalan[anahtar] = deger;
+      }
+    });
+
+    if (kalan.length == u.queryParameters.length) return adres;
+    if (kalan.isNotEmpty) return u.replace(queryParameters: kalan).toString();
+
+    // Hicbiri kalmadi: soru isareti de gitmeli.
+    //
+    // `replace(queryParameters: null)` ISE YARAMAZ — `Uri.replace` icin
+    // `null` "bu parcayi degistirme" demek, yani sorgu oldugu gibi kalir.
+    // Sorguyu gercekten atmanin yolu adresi parcalarindan yeniden kurmak.
+    return Uri(
+      scheme: u.scheme,
+      userInfo: u.userInfo.isEmpty ? null : u.userInfo,
+      host: u.host,
+      port: u.hasPort ? u.port : null,
+      path: u.path,
+      fragment: u.fragment.isEmpty ? null : u.fragment,
+    ).toString();
   }
 
   /// Adres desteklenen bir kaynaga mi ait?

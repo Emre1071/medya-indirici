@@ -17,17 +17,23 @@ void main() {
       const paylasim = 'Şerif Ruç on Instagram: "Hayırlı akşamlar 🎻🎸"\n'
           'https://www.instagram.com/reel/DAbC123/?igsh=MXY5aA==';
 
+      // Takip parametresi ayni anda temizleniyor (asagidaki teste bak).
       expect(
         Baglanti.ayikla(paylasim),
-        'https://www.instagram.com/reel/DAbC123/?igsh=MXY5aA==',
+        'https://www.instagram.com/reel/DAbC123/',
       );
     });
 
-    test('sondaki esittir kirpilmiyor', () {
-      // `?igsh=...==` parametresi esittir ile bitiyor; kirpilirsa adres
-      // bozulur ve gonderi bulunamaz.
-      const paylasim = 'https://www.instagram.com/reel/X/?igsh=abcd==';
-      expect(Baglanti.ayikla(paylasim), endsWith('igsh=abcd=='));
+    test('takip parametresi (igsh) atiliyor', () {
+      // `igsh` bir paylasim jetonu; icerigi belirlemiyor ve Instagram
+      // bazi durumlarda onunla gelen istegi "tanimadigim baglanti"
+      // sayip giris istiyor.
+      const paylasim = 'https://www.instagram.com/reel/DAbC123/?igsh=MXY5aA==';
+      expect(
+        Baglanti.ayikla(paylasim),
+        'https://www.instagram.com/reel/DAbC123/',
+        reason: 'soru isareti de kalmamali',
+      );
     });
 
     test('aciklamadaki baska link degil, gonderi linki seciliyor', () {
@@ -45,7 +51,8 @@ void main() {
       const paylasim = 'İsmail YK - Her Şeyin Yalan\n'
           'https://youtu.be/dQw4w9WgXcQ?si=AbCdEf';
 
-      expect(Baglanti.ayikla(paylasim), 'https://youtu.be/dQw4w9WgXcQ?si=AbCdEf');
+      // `si` de bir takip parametresi; adres temizlenmis donuyor.
+      expect(Baglanti.ayikla(paylasim), 'https://youtu.be/dQw4w9WgXcQ');
     });
 
     test('mobil alt alan adi taniniyor', () {
@@ -75,6 +82,15 @@ void main() {
       expect(Baglanti.ayikla('"https://youtu.be/abc"'), 'https://youtu.be/abc');
     });
 
+    test('sondaki esittir kirpilmiyor', () {
+      // Adresin kendi parcasi olan `=` noktalama sanilip atilmamali.
+      // `token` takip listesinde degil, o yuzden adreste kaliyor.
+      expect(
+        Baglanti.ayikla('https://vimeo.com/123?token=abcd=='),
+        endsWith('token=abcd=='),
+      );
+    });
+
     test('bolu isareti korunuyor', () {
       // Adresin kendi parcasi; noktalama sanip atilirsa adres degisir.
       expect(
@@ -102,6 +118,37 @@ void main() {
       // Motor da bunu kabul etmiyor; burada yakalamak, kullaniciya
       // "bağlantı bulunamadı" demeyi mumkun kiliyor.
       expect(Baglanti.ayikla('instagram.com/reel/X'), isNull);
+    });
+  });
+
+  group('takip parametrelerinin temizlenmesi', () {
+    test('icerigi belirleyen parametreler KORUNUYOR', () {
+      // `v` YouTube'un video kimligi — silinirse adres tamamen bozulur.
+      expect(
+        Baglanti.temizle('https://www.youtube.com/watch?v=abc123'),
+        'https://www.youtube.com/watch?v=abc123',
+      );
+    });
+
+    test('takip parametresi atilirken digerleri kaliyor', () {
+      final sonuc = Baglanti.temizle(
+        'https://www.youtube.com/watch?v=abc123&si=XYZ&t=42',
+      );
+      expect(sonuc, contains('v=abc123'));
+      expect(sonuc, contains('t=42'));
+      expect(sonuc, isNot(contains('si=')));
+    });
+
+    test('sorgusuz adres degismiyor', () {
+      expect(
+        Baglanti.temizle('https://www.instagram.com/reel/X/'),
+        'https://www.instagram.com/reel/X/',
+      );
+    });
+
+    test('cozumlenemeyen adres oldugu gibi doner', () {
+      // Amac temizlemek, adresi dogrulamak degil.
+      expect(Baglanti.temizle('bozuk adres'), 'bozuk adres');
     });
   });
 

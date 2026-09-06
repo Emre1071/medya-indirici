@@ -110,6 +110,8 @@ class YtDlpMotoru implements IndirmeMotoru {
         'adres': bilgi.adres,
         'tur': tur == IndirmeTuru.ses ? 'ses' : 'video',
         'formatKimlik': kalite?.formatKimlik,
+        // Motor buna bakip gerekiyorsa indirmeye ses akisini ekliyor.
+        'sesIceriyor': kalite?.sesIceriyor ?? false,
         'isKimlik': isKimlik,
         'hedefKlasor': '${klasor.path}/indirilenler',
         'mp3Zorla': tur == IndirmeTuru.ses && mp3Zorla,
@@ -271,6 +273,7 @@ class YtDlpMotoru implements IndirmeMotoru {
         formatKimlik: k['formatKimlik'] as String? ?? '',
         uzanti: k['uzanti'] as String? ?? '',
         boyutBayt: (k['boyutBayt'] as num?)?.toInt(),
+        sesIceriyor: k['sesVarMi'] == true,
       );
     }).toList();
   }
@@ -295,7 +298,13 @@ class YtDlpMotoru implements IndirmeMotoru {
         m.contains('rate-limit') ||
         m.contains('rate limit') ||
         m.contains('sign in')) {
-      return 'Bu içerik giriş yapmayı gerektiriyor. Kapalı bir hesap olabilir.';
+      // "Giriş gerekiyor" cogu zaman kapali hesap DEGIL: Instagram sayfa
+      // yapisini degistirmis oluyor ve eldeki yt-dlp onu tanimiyor. Cozum
+      // neredeyse her zaman motoru guncellemek — kullaniciyi once oraya
+      // yonlendirmek, "kapalı hesap" deyip yolu kapatmaktan iyi.
+      return 'Bu içerik alınamadı; giriş isteniyor. Genellikle Ayarlar\'dan '
+          '"Motoru güncelle" demek çözer. Olmazsa gönderi kapalı bir '
+          'hesaba ait olabilir.';
     }
     if (m.contains('private') || m.contains('not available')) {
       return 'İçeriğe ulaşılamadı. Gönderi silinmiş veya hesap kapalı olabilir.';

@@ -82,11 +82,20 @@ class MedyaKalitesi {
   /// Kabin turu: `mp4`, `m4a`, `webm`...
   final String uzanti;
 
+  /// Bu format kendi icinde ses tasiyor mu?
+  ///
+  /// YouTube yuksek cozunurluklu videoyu **sessiz** veriyor (DASH):
+  /// `1080p` goruntu ayri, ses ayri geliyor. Bu bilgi motora tasinmazsa
+  /// yalnizca goruntu iniyor ve dosya sessiz kaydediliyor — telefonda tam
+  /// bu yasandi. Motor, `false` gordugunde indirmeye ses akisini ekliyor.
+  final bool sesIceriyor;
+
   const MedyaKalitesi({
     required this.etiket,
     required this.formatKimlik,
     required this.uzanti,
     this.boyutBayt,
+    this.sesIceriyor = false,
   });
 
   /// `12.4 MB` bicimi. Boyut bilinmiyorsa bos metin.
