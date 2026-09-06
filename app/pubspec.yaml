@@ -59,6 +59,50 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
 
+  # ---- Yalnizca ARAC zamani; APK'ya girmiyorlar ----
+  #
+  # Projenin "gereksiz bagimlilik ekleme" cizgisi CALISMA ZAMANI icin.
+  # Bunlar uygulama simgesini uretmek/uygulamak icin bir kez kosuyor,
+  # `dev_dependencies` oldugu icin derlenen APK'da yer almiyorlar.
+
+  # `tool/generate_icon.dart` simgeyi bununla ciziyor.
+  image: ^4.5.4
+
+  # Uretilen PNG'yi butun mipmap klasorlerine ve adaptive icon
+  # kaynaklarina dagitiyor.
+  flutter_launcher_icons: ^0.14.4
+
+# ====================================================================
+# UYGULAMA SIMGESI
+#
+# Kaynak gorseller `tool/generate_icon.dart` ile uretiliyor; elle
+# duzenlenmiyorlar. Renk/oran degisecekse once o betik degisir.
+#
+# `dart run flutter_launcher_icons` butun mipmap olculerini ve adaptive
+# icon kaynaklarini yeniden yaziyor.
+#
+# ⚠️ On plan AYRI ve SAFFAF bir dosya (`app_icon_foreground.png`).
+# Zeminli gorsel on plan olarak verilirse Android onu kendi maskesiyle
+# kirpiyor ve koyu kare, arka plan renginin uzerinde kucuk bir kutu gibi
+# duruyor — `adaptive_icon_background` bosa gidiyor.
+#
+# `android: true` (isim vermek yerine): uretilen dosyalar mevcut
+# `ic_launcher` adinin uzerine yaziliyor, boylece AndroidManifest'e
+# DOKUNULMUYOR. Manifest'te gerekcesi yazili bloklar var (INTERNET izni
+# uyarisi, paylas menusu filtresi); onlari bir aracin yeniden yazmasina
+# gerek yok.
+#
+# Simge gorselleri `flutter: assets:` altina EKLENMEDI: yalnizca arac
+# zamaninda okunuyorlar, APK'ya girmelerinin anlami yok.
+# ====================================================================
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon/app_icon.png"
+  adaptive_icon_background: "#121214"
+  adaptive_icon_foreground: "assets/icon/app_icon_foreground.png"
+  min_sdk_android: 24
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 

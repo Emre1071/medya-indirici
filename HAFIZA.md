@@ -800,6 +800,49 @@ Sonuç: **uygulamada artık hiçbir anahtar durmuyor.**
   görünüyor.
 - Kapak yoksa boşluk değil, kaynak simgeli yer tutucu çiziliyor.
 
+### Uygulama simgesi (launcher icon)
+
+Nota + indirme oku, zümrüt/teal (`#2ED3B7`) — **uygulama içindeki
+`SesIndirIkonu` ile aynı fikir ve aynı renk**, simge ile ekran birbirini
+tekrar etsin diye.
+
+🔑 **Elle çizilmiş bir görsel yok: `tool/generate_icon.dart` üretiyor.**
+Simge birkaç sabitten ibaret; renk değişince veya güvenli alan yeniden
+hesaplanınca betik yeniden koşuyor. Tasarım dosyası açıp dışa aktarmak
+gerekmiyor.
+
+```bash
+cd app && dart run tool/generate_icon.dart   # PNG'leri uretir
+dart run flutter_launcher_icons              # mipmap'lere dagitir
+```
+
+⚠️ **İKİ ayrı PNG üretiliyor, sebebi önemli:**
+
+| Dosya | Zemin | Nerede |
+|---|---|---|
+| `app_icon.png` | koyu `#121214` | eski/adaptive olmayan cihazlar |
+| `app_icon_foreground.png` | **saydam** | adaptive icon ön planı |
+
+Adaptive ön plana zeminli görsel verilirse Android onu kendi maskesiyle
+kırpıyor ve koyu kare, arka plan renginin üzerinde küçük bir kutu gibi
+duruyor — `adaptive_icon_background` boşa gidiyor. Saydamlık üretimden
+sonra köşe pikselinin alfası okunarak doğrulandı (`app_icon` 255,
+`foreground` 0).
+
+- **Güvenli alan:** çizim %20 boşlukla 0.60'lık kutuya sıkışıyor; Android
+  dairesel maskeyi ve adaptive icon'un "orta %66" garantisini birlikte
+  karşılıyor. FLI ön plana ayrıca %16 inset ekliyor.
+- **`android: true`** (isim vermek yerine): üretilenler mevcut
+  `ic_launcher` adının üzerine yazılıyor, böylece **AndroidManifest'e
+  dokunulmuyor.** Manifest'te gerekçesi yazılı bloklar var (INTERNET izni
+  uyarısı, paylaş menüsü filtresi); bir aracın onları yeniden yazması
+  gereksiz risk. Üretimden sonra manifestin değişmediği doğrulandı.
+- Simge PNG'leri `flutter: assets:` altına **eklenmedi** — yalnız araç
+  zamanında okunuyorlar, APK'ya girmelerinin anlamı yok.
+- `image` ve `flutter_launcher_icons` **dev_dependencies**: projenin
+  "gereksiz bağımlılık ekleme" çizgisi çalışma zamanı için; bunlar
+  derlenen APK'da yer almıyor.
+
 ---
 
 ## 7. Aşama durumu (`PLAN.md` §6)
@@ -851,8 +894,7 @@ Kalan aşamalar: **5** (bildirim + arka planda indirme) ve **6**
 ### Açık kalan kararlar (Yahya'da)
 1. **Keystore yedeği** (§12) — tek kopya diskte duruyor, kaybı geri dönüşsüz
 2. **Projenin ASCII bir yola taşınması** (§10) — derleme için şart
-3. Uygulama ikonu (`ic_launcher` hâlâ Flutter varsayılanı)
-4. armeabi-v7a APK'sı da release'e eklensin mi (şu an yalnız arm64 yayında)
+3. armeabi-v7a APK'sı da release'e eklensin mi (şu an yalnız arm64 yayında)
 
 ---
 
