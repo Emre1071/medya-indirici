@@ -6,10 +6,42 @@
 > **Yetki sırası:** `PLAN.md` (ürün kararları) → `notlar/KARARLAR.md` (kilitli
 > kararlar) → `notlar/ELENENLER.md` (kapanmış tartışmalar) → bu dosya.
 > Çelişki varsa yetkili dosya kazanır; burası yalnız **özet ve yön** verir.
-> Son güncelleme: 2026-09-05 (**telefonda ilk deneme: çöküyordu** — motor
-> hatası uygulamayı öldürüyordu, §4.4; öncesinde Aşama 4 paylaş menüsü
-> §4.3, v0.1.0 ve imza anahtarı §11-§12, dağıtım GitHub Releases'e taşındı
-> §5, iptal ve MediaStore, derleme engeli §10).
+>
+> 🔒 **Bu dosya işle birlikte güncellenir** — her kritik değişiklik, hata
+> çözümü ve sürüm yükseltmesinden sonra. Kuralın tamamı §8 başında.
+>
+> Son güncelleme: 2026-09-06 — **uygulama telefonda çalışıyor.** Motor
+> açılıyor, paylaş menüsü ve çözümleme doğrulandı. İndirme tarafındaki
+> düzeltmeler (§4.7 sessiz video, §4.8 dosya/geçmiş) yazıldı ama **cihazda
+> henüz denenmedi**; **v0.1.1 yayında** (§11) ve OTA ile kurulması bekleniyor.
+> Öncesi: R8 §4.6, çökme §4.4-§4.5, paylaş menüsü §4.3, imza anahtarı §12,
+> derleme engeli §10.
+
+---
+
+## 0. Hızlı dizin
+
+**Şu an neredeyiz:** §7 · **Sıradaki iş:** §7 sonu ·
+**Bu dosyayı güncelleme kuralı:** §8 başı
+
+Çözülmüş sorunlar — bir belirti tekrarlarsa önce buraya bak:
+
+| Belirti | Kök neden | Bölüm |
+|---|---|---|
+| APK hiç derlenmiyor | `abiFilters` + `splits` çakışması; Flutter ikisini kendi dolduruyor | §4 gradle |
+| Derleme Türkçe yolda durup kalıyor | AGP + Dart AOT non-ASCII yolu kabul etmiyor | §10 |
+| Uygulama açılır açılmaz çöküyor | `catch (Exception)` `UnsatisfiedLinkError`'ü kaçırıyor | §4.4 |
+| Motor açılmıyor, sebep görünmüyor | Tanı uygulamanın içine kondu (cihaz `adb`'ye bağlanmıyor) | §4.5 |
+| `class p3.a is not a concrete class` | R8 yansımayla kullanılan sınıfları/kurucuları siliyor | §4.6 |
+| Video sessiz iniyor | YouTube DASH: `-f 137` yalnız görüntü, ses ayrı akış | §4.7 |
+| Instagram "giriş gerekiyor" | Takip parametreleri + eski yt-dlp; UA yalnız Instagram'a | §4.7 |
+| "Tamamlandı ama dosya bulunamadı" + geçmiş boş | Çıktıyı klasör farkıyla bulmak; iş başına klasör | §4.8 |
+| İndirildi ama galeride yok | `IS_PENDING` temizlenmemiş | §4.8 |
+| Güncelleme kurulmuyor | `versionCode` artmamış (`--split-per-abi` çarpanı) | §11 |
+
+**Tekrar eden ders:** bu projedeki hataların çoğu **derlemede görünmüyor,
+yalnızca telefonda ortaya çıkıyor.** Bu yüzden hem `⚠️`/`🔴` işaretleri hem
+de uygulamanın kendi tanı raporu (§4.5) var.
 
 ---
 
@@ -759,23 +791,35 @@ Sonuç: **uygulamada artık hiçbir anahtar durmuyor.**
 |---|---|
 | **0** Kararlar | ✅ `notlar/KARARLAR.md` kilitli |
 | **1** Ekranlar + sahte veri | ✅ 3 sekme + önizleme + sahte motor çalışıyor (tarayıcıda `flutter run -d chrome`) |
-| **2** Android köprüsü | 🔶 **APK derleniyor ✅ (2026-09-05, ilk kez), cihazda hâlâ DENENMEDİ** — telefonda gerçek indirme yapılmadı |
-| **3** Arayüz ↔ motor | ✅ kod tarafı bağlı (kuyruk → motor → önizleme); gerçek indirme testi Aşama 2 ile birlikte bekliyor |
-| **4** Paylaş menüsü | ✅ **bitti** — `ACTION_SEND` filtresi + `PaylasimKoprusu.kt` + link ayıklama (§4.3). Paket eklenmedi |
-| **5** MediaStore + bildirim + arka plan | 🔶 **MediaStore yazıldı ✅** (§4.1) — bildirim ve arka planda indirme yok |
-| **6** Kuyruk / geçmiş / ayarlar cilası | 🔶 kuyruk, geçmiş ve **iptal** var; kalıcı kayıt (sqflite) yok, "Aç/Paylaş" gerçek dosya açmıyor |
-| **7** Kendini güncelleme | ✅ **bitti** — depo açıldı, kalıcı imza anahtarı üretildi, **v0.1.0 yayında** (§11, §12). Zincir API üzerinden uçtan uca doğrulandı |
+| **2** Android köprüsü | ✅ **bitti** — telefonda çalışıyor, motor açılıyor (Redmi Note 9 Pro, Android 12) |
+| **3** Arayüz ↔ motor | ✅ çözümleme cihazda doğrulandı; indirme sonrası akış §4.8'de düzeltildi |
+| **4** Paylaş menüsü | ✅ **bitti ve cihazda doğrulandı** — Instagram/YouTube → Paylaş → önizleme açılıyor (§4.3) |
+| **5** MediaStore + bildirim + arka plan | 🔶 **MediaStore yazıldı** (§4.1, §4.8) — cihazda henüz doğrulanmadı; bildirim ve arka planda indirme yok |
+| **6** Kuyruk / geçmiş / ayarlar cilası | 🔶 kuyruk, geçmiş, **iptal** var; kalıcı kayıt (sqflite) yok, "Aç/Paylaş" gerçek dosya açmıyor |
+| **7** Kendini güncelleme | ✅ **bitti** — imza anahtarı, **v0.1.1 yayında** (§11, §12). OTA akışı cihazda henüz denenmedi |
 | **8** Facebook/TikTok/kapalı hesap | ❌ (`kaynakBul` zaten tanıyor, gerisi yok) |
 
-### Sıradaki iş
-**Gerçek cihazda ilk indirme** — hâlâ tek doğrulanmamış nokta ve artık
-biriken iş çok. APK derleniyor ve imzalı, kurulacak sürüm hazır.
+### Cihazda ne doğrulandı, ne doğrulanmadı
 
-Telefonda sınanacaklar (hiçbiri cihazda denenmedi):
-1. Motorun açılması ve "Motor hazırlanıyor…" durumunun geçmesi
-2. Instagram → Paylaş → uygulama listede çıkıyor mu, önizleme açılıyor mu
-3. Çözümleme → indirme → **iptal**
-4. Dosyanın müzik çalarda / galeride görünmesi (MediaStore)
+Uzun süre hiçbir şey telefonda çalışmamıştı; artık ayrım net tutulmalı.
+
+| Akış | Durum |
+|---|---|
+| Uygulama açılıyor | ✅ (§4.4, §4.6 — üç ayrı çökme sebebi giderildi) |
+| Motor (gömülü yt-dlp) açılıyor | ✅ (§4.6) |
+| Paylaş menüsü → link ayıklama → önizleme | ✅ |
+| Çözümleme (kapak, başlık, kaliteler) | ✅ |
+| **İndirme → dosya galeride** | ❓ §4.7 ve §4.8 düzeltmelerinden sonra **denenmedi** |
+| **Sesli video** | ❓ §4.7'den sonra denenmedi |
+| **İndirme geçmişi** | ❓ §4.8'den sonra denenmedi |
+| **İptal** | ❓ hiç denenmedi |
+| **OTA güncelleme** (indir + kur) | ❓ hiç denenmedi — v0.1.1 tam bunun için yayınlandı |
+
+### Sıradaki iş
+**v0.1.1'i telefonda OTA ile kurmak.** Cihazdaki sürüm `0.1.0`, yayındaki
+`0.1.1` → uygulama güncellemeyi kendisi teklif ediyor. Bu hem OTA yolunu
+ilk kez sınıyor hem de yukarıdaki bütün "denenmedi" satırlarını tek
+oturumda kapatacak sürümü cihaza getiriyor.
 
 Kalan aşamalar: **5** (bildirim + arka planda indirme) ve **6**
 (kalıcı geçmiş, "Aç/Paylaş").
@@ -789,6 +833,39 @@ Kalan aşamalar: **5** (bildirim + arka planda indirme) ve **6**
 ---
 
 ## 8. Geliştirme standartları
+
+### 🔒 Kalıcı kural: bu dosya işle birlikte güncellenir
+
+**Her kritik mimari değişiklik, hata çözümü ve sürüm yükseltmesinden sonra
+HAFIZA.md güncellenir — ayrıca istenmesine gerek yok.** İşin parçasıdır,
+sonradan yapılacak bir temizlik değil.
+
+Neyin kaydedileceği:
+
+| Olay | Yazılacak |
+|---|---|
+| **Mimari karar** | Ne seçildi, **neye karşı** seçildi, gerekçe. Elenen yol da yazılır — yoksa aynı tartışma tekrar açılır. |
+| **Hata çözümü** | Belirti → kök neden → düzeltme. Kök neden belirtiden değerlidir: aynı sebep başka bir belirtiyle geri gelebilir. |
+| **Sürüm yükseltme** | Sürüm, yayın adresi, o sürümde neyin değiştiği (§11). |
+| **Cihazda doğrulama** | §7'deki "doğrulandı / doğrulanmadı" tablosu. **En çok bayatlayan yer burasıdır.** |
+
+Nasıl yazılır:
+
+- **"Ne yapıldığı" değil "neden" ve "neyi önlüyor".** `catch (Throwable)`
+  satırını görmek kolay; onun bir `Error`'ü kaçırdığında uygulamayı
+  öldürdüğünü bilmek zor.
+- **Sessizce bozulabilen şeyler `⚠️` / `🔴` ile işaretlenir** — derlemenin
+  hata vermediği, yalnızca telefonda ortaya çıkan tuzaklar (`proguardFiles`
+  satırı, `useLegacyPackaging`, `versionCode` çarpanı…).
+- **Bir düzeltme bir gerçeği çürütürse eski satır DÜZELTİLİR**, altına yeni
+  bir not eklenmez. Çelişen iki cümle, hiç yazmamaktan kötüdür.
+- Ölçülen sayı varsa yazılır (APK boyutu, R8 kazancı, test sayısı) —
+  "büyüdü/küçüldü" değil.
+
+⚠️ **Bu dosya ile kod çelişirse kodu dosyaya uydurma** — önce burayı
+düzelt ve durumu bildir.
+
+### Kod standartları
 
 - **Türkçe isimlendirme.** Sınıf, dosya, değişken, klasör — hepsi Türkçe
   (`kuyruk_yoneticisi.dart`, `MedyaBilgisi`, `cozumle`). Bu kod tabanının
