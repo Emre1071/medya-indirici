@@ -38,15 +38,25 @@ class MotorDurumu {
   /// metin degil; ne yapabilecegini anlatir.
   final String? hata;
 
+  /// Teknik ayrinti: istisna zinciri + ortam raporu.
+  ///
+  /// Kullaniciya kendiliginden gosterilmiyor (anlamsiz gelir) ama Ayarlar'dan
+  /// okunup kopyalanabiliyor. Cihaz `adb`'ye baglanamadiginda taninin tek
+  /// kaynagi bu — o yuzden atilmiyor.
+  final String? ayrinti;
+
   const MotorDurumu.hazirlaniyor()
       : hazirMi = false,
-        hata = null;
+        hata = null,
+        ayrinti = null;
 
   const MotorDurumu.hazir()
       : hazirMi = true,
-        hata = null;
+        hata = null,
+        ayrinti = null;
 
-  const MotorDurumu.kurulamadi(String this.hata) : hazirMi = false;
+  const MotorDurumu.kurulamadi(String this.hata, {this.ayrinti})
+      : hazirMi = false;
 
   bool get kurulamadiMi => hata != null;
 

@@ -162,6 +162,18 @@ class YtDlpMotoru implements IndirmeMotoru {
     }
   }
 
+  /// Kurulumu bastan dener.
+  ///
+  /// Kurulum gecici bir sebeple (yer yoktu, sonra acildi) basarisiz
+  /// olduysa uygulamayi kapatip acmaya gerek kalmasin diye.
+  Future<void> motoruYenidenKur() async {
+    try {
+      await _komut.invokeMethod<void>('motoruYenidenKur');
+    } on PlatformException {
+      // Sonuc `durum()` ile okunuyor; burada hata gostermeye gerek yok.
+    }
+  }
+
   /// Motor (yt-dlp) kendini gunceller. Uygulamanin yeniden kurulmasi
   /// gerekmez — Instagram/YouTube degisikliklerinin cozumu budur.
   Future<String?> motoruGuncelle() async {
@@ -192,7 +204,14 @@ class YtDlpMotoru implements IndirmeMotoru {
       if (hata == null || hata.isEmpty) {
         return const MotorDurumu.hazirlaniyor();
       }
-      return MotorDurumu.kurulamadi(_kurulumHatasiCevir(hata));
+
+      final rapor = ham['rapor'] as String?;
+      return MotorDurumu.kurulamadi(
+        _kurulumHatasiCevir(hata),
+        // Ham metin kullaniciya gosterilmiyor ama saklaniyor: cihazdan log
+        // alinamadiginda taninin tek kaynagi bu.
+        ayrinti: rapor == null || rapor.isEmpty ? hata : '$hata\n\n$rapor',
+      );
     } on PlatformException {
       return const MotorDurumu.hazirlaniyor();
     } on MissingPluginException {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../cekirdek/surum.dart';
 import '../../cekirdek/tema.dart';
@@ -28,11 +29,19 @@ class AyarlarEkrani extends StatefulWidget {
   final KuyrukYoneticisi kuyruk;
   final GuncellemeSonucu? guncelleme;
 
+  /// Motorun acilis durumu. Kurulum basarisizsa sebep burada gosteriliyor.
+  final MotorDurumu motorDurumu;
+
+  /// Kurulumu bastan denemek icin; kabuk yeniden bekleyip durumu tazeliyor.
+  final Future<void> Function() motoruYenidenDene;
+
   const AyarlarEkrani({
     super.key,
     required this.motor,
     required this.kuyruk,
     required this.guncelleme,
+    required this.motorDurumu,
+    required this.motoruYenidenDene,
   });
 
   @override
@@ -132,6 +141,13 @@ class _AyarlarEkraniState extends State<AyarlarEkrani> {
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 8),
       children: [
+        // Motor kurulamadiysa EN USTE cikiyor: kullanicinin bu ekrani
+        // acmasinin sebebi buyuk ihtimalle o.
+        if (widget.motorDurumu.kurulamadiMi) ...[
+          _baslik('Sorun'),
+          _motorKurulamadi(),
+          const Divider(height: 24),
+        ],
         _baslik('Güncelleme'),
         _motorGuncellemesi(),
         _uygulamaGuncellemesi(),
@@ -181,6 +197,123 @@ class _AyarlarEkraniState extends State<AyarlarEkrani> {
         else
           const SizedBox(height: 24),
       ],
+    );
+  }
+
+  /// Motor kurulamadiginda gosterilen bolum.
+  ///
+  /// ## Nicin teknik ayrinti da veriliyor?
+  /// Kurulum hatasinin sebebi disaridan gorunmuyor ve cihaz `adb`'ye
+  /// baglanamadiginda (USB hata ayiklama kapali) log da alinamiyor. Ayrinti
+  /// **kopyalanabilir** olsun ki kullanici onu iletebilsin; boylece
+  /// uygulama kendi tanisini kendi koyuyor.
+  ///
+  /// Ayrinti kendiliginden acilmiyor: normal kullaniciya yigin izi
+  /// gostermek onu korkutur, isine de yaramaz.
+  Widget _motorKurulamadi() {
+    final durum = widget.motorDurumu;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+              Olculer.kenarBosluk, 0, Olculer.kenarBosluk, 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.error_outline, size: 18, color: Renkler.hata),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  durum.hata ?? 'İndirme motoru başlatılamadı.',
+                  style: const TextStyle(
+                    fontSize: Olculer.govde,
+                    color: Renkler.hata,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        ListTile(
+          leading: const Icon(Icons.refresh, color: Renkler.vurgu),
+          title: const Text('Motoru yeniden başlat'),
+          subtitle: const Text(
+            'Uygulamayı kapatmadan tekrar dener',
+            style: TextStyle(fontSize: Olculer.kucukBilgi),
+          ),
+          onTap: _motoruYenidenBaslat,
+        ),
+        if (durum.ayrinti != null)
+          ListTile(
+            leading: const Icon(Icons.bug_report_outlined,
+                color: Renkler.metinSolgun),
+            title: const Text('Teknik ayrıntıyı göster'),
+            subtitle: const Text(
+              'Sorunu bildirirken bu metni ilet',
+              style: TextStyle(fontSize: Olculer.kucukBilgi),
+            ),
+            onTap: () => _ayrintiyiGoster(durum.ayrinti!),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _motoruYenidenBaslat() async {
+    final motor = widget.motor;
+    if (motor is YtDlpMotoru) await motor.motoruYenidenKur();
+
+    await widget.motoruYenidenDene();
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          widget.motorDurumu.hazirMi
+              ? 'Motor hazır.'
+              : 'Motor hâlâ başlatılamıyor.',
+        ),
+      ),
+    );
+  }
+
+  void _ayrintiyiGoster(String ayrinti) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Renkler.yuzey,
+        title: const Text('Teknik ayrıntı'),
+        content: SingleChildScrollView(
+          child: SelectableText(
+            ayrinti,
+            style: const TextStyle(
+              fontSize: Olculer.etiket,
+              fontFamily: 'monospace',
+              height: 1.4,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Kapat'),
+          ),
+          FilledButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: ayrinti));
+              if (!context.mounted) return;
+              Navigator.of(context).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Panoya kopyalandı.')),
+              );
+            },
+            icon: const Icon(Icons.copy, size: 18),
+            label: const Text('Kopyala'),
+          ),
+        ],
+      ),
     );
   }
 

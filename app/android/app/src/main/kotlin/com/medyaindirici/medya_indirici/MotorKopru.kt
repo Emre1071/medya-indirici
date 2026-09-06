@@ -1,6 +1,7 @@
 package com.medyaindirici.medya_indirici
 
 import android.content.Context
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -94,12 +95,37 @@ class MotorKopru(private val baglam: Context) {
     @Volatile
     private var kurulumHatasi: String? = null
 
+    /**
+     * Kurulum basarisiz oldugunda ortamin fotografi.
+     *
+     * ## Nicin gerekiyor
+     * "Motor baslatilamadi" tek basina hicbir sey soylemiyor. Sebep genelde
+     * su ucundan biri ve ucu de disaridan gorunmuyor:
+     * cihazin mimarisi APK'ninkiyle uyusmuyor, gomulu ikili kurulumda
+     * diske acilmamis, ya da telefonda yer yok.
+     *
+     * Cihaz `adb`'ye baglanamadiginda (USB hata ayiklama kapali) logcat
+     * alinamiyor. Bu rapor sayesinde uygulama kendi tanisini kendi
+     * koyabiliyor: kullanici Ayarlar'dan metni kopyalayip iletebiliyor.
+     */
+    @Volatile
+    private var kurulumRaporu: String? = null
+
+    /** Ayni anda iki kurulum baslamasin. */
+    @Volatile
+    private var kurulumSuruyor = false
+
     fun kur() {
+        if (hazir || kurulumSuruyor) return
+        kurulumSuruyor = true
+
         havuz.execute {
             try {
                 YoutubeDL.getInstance().init(baglam)
                 FFmpeg.getInstance().init(baglam)
                 hazir = true
+                kurulumHatasi = null
+                kurulumRaporu = null
                 Log.i(ETIKET, "Motor hazir")
             } catch (h: Throwable) {
                 // `Exception` DEGIL `Throwable` yakalaniyor.
@@ -115,10 +141,77 @@ class MotorKopru(private val baglam: Context) {
                 // Motor kurulamasa bile uygulama ayakta kalmali: kullanici
                 // gecmisine bakabilmeli, ayarlari acabilmeli ve en onemlisi
                 // NEDEN calismadigini gorebilmeli.
-                kurulumHatasi = h.message ?: h.toString()
-                Log.e(ETIKET, "Motor kurulamadi", h)
+                // Ham metin degil, TUM zincir saklaniyor: YoutubeDLException
+                // genelde asil sebebi (IOException, ZipException...) sarmaliyor
+                // ve disardaki mesaj "failed to initialize" gibi bos bir cumle
+                // oluyor.
+                kurulumHatasi = hataZinciri(h)
+                kurulumRaporu = ortamRaporu()
+                Log.e(ETIKET, "Motor kurulamadi\n$kurulumRaporu", h)
+            } finally {
+                kurulumSuruyor = false
             }
         }
+    }
+
+    /** Istisnayi sebep zinciriyle birlikte okunur metne cevirir. */
+    private fun hataZinciri(h: Throwable): String {
+        val yazi = StringBuilder()
+        var suanki: Throwable? = h
+        var derinlik = 0
+
+        // Zincir kendini tekrar edebiliyor; derinlik sinirli.
+        while (suanki != null && derinlik < 6) {
+            if (derinlik > 0) yazi.append("\n  sebep: ")
+            yazi.append(suanki.javaClass.simpleName)
+            suanki.message?.let { yazi.append(": ").append(it) }
+            suanki = suanki.cause
+            derinlik++
+        }
+        return yazi.toString()
+    }
+
+    /**
+     * Kurulumun basarisiz olabilecegi uc sebebi de gosteren ortam raporu.
+     *
+     * Sirasiyla: cihaz mimarisi, gomulu ikililerin diske acilip acilmadigi,
+     * bos alan.
+     */
+    private fun ortamRaporu(): String {
+        val yazi = StringBuilder()
+
+        yazi.append("Cihaz: ${Build.MANUFACTURER} ${Build.MODEL}")
+        yazi.append(" (Android ${Build.VERSION.RELEASE}, API ${Build.VERSION.SDK_INT})\n")
+        yazi.append("Cihaz mimarileri: ${Build.SUPPORTED_ABIS.joinToString()}\n")
+
+        // ASIL SORU: gomulu ikililer kurulumda diske acilmis mi?
+        // Acilmamissa YoutubeDL.init() zaten calisamaz.
+        val ikiliKlasoru = baglam.applicationInfo.nativeLibraryDir
+        yazi.append("Ikili klasoru: $ikiliKlasoru\n")
+        try {
+            val dosyalar = File(ikiliKlasoru).listFiles()
+            if (dosyalar == null || dosyalar.isEmpty()) {
+                yazi.append("  BOS - gomulu ikililer diske ACILMAMIS\n")
+            } else {
+                dosyalar.sortedBy { it.name }.forEach {
+                    yazi.append("  ${it.name}  ${it.length() / 1024} KB\n")
+                }
+            }
+        } catch (h: Throwable) {
+            yazi.append("  okunamadi: ${h.javaClass.simpleName}\n")
+        }
+
+        try {
+            val klasor = baglam.noBackupFilesDir
+            val bosMb = klasor.usableSpace / (1024 * 1024)
+            yazi.append("Calisma klasoru: ${klasor.absolutePath}\n")
+            yazi.append("Bos alan: $bosMb MB")
+            if (bosMb < 300) yazi.append("  ← AZ OLABILIR")
+        } catch (h: Throwable) {
+            yazi.append("Bos alan okunamadi: ${h.javaClass.simpleName}")
+        }
+
+        return yazi.toString()
     }
 
     fun kanallariBagla(mesajci: BinaryMessenger) {
@@ -128,8 +221,20 @@ class MotorKopru(private val baglam: Context) {
                 // olabiliyor ve o durumda arayuzun sonsuza kadar beklemek
                 // yerine sebebi gostermesi gerekiyor.
                 "motorDurumu" -> cevap.success(
-                    mapOf("hazir" to hazir, "hata" to kurulumHatasi)
+                    mapOf(
+                        "hazir" to hazir,
+                        "hata" to kurulumHatasi,
+                        "rapor" to kurulumRaporu,
+                    )
                 )
+
+                // Kurulum basarisiz olduysa uygulamayi yeniden baslatmadan
+                // yeniden denenebilsin. Gecici bir sebep (yer yoksa acilan
+                // alan gibi) icin uygulamayi kapatip acmak gereksiz.
+                "motoruYenidenKur" -> {
+                    kur()
+                    cevap.success(null)
+                }
                 "motorSurumu" -> motorSurumu(cevap)
                 "cozumle" -> {
                     val adres = cagri.argument<String>("adres")

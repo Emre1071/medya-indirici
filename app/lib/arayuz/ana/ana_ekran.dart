@@ -237,8 +237,9 @@ class _MotorSeridi extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              durum.hata ??
-                  'Motor hazırlanıyor… İlk açılışta birkaç saniye sürer.',
+              bozuk
+                  ? '${durum.hata}\n\nAyrıntı ve yeniden deneme: Ayarlar.'
+                  : 'Motor hazırlanıyor… İlk açılışta birkaç saniye sürer.',
               style: TextStyle(
                 fontSize: Olculer.kucukBilgi,
                 color: renk,

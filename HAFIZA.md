@@ -368,6 +368,41 @@ diyor.
 
 `SahteMotor.kurulumuBozukTaklitEt = true` ile bu ekran tarayıcıda denenebilir.
 
+### 4.5 Motor kurulumu başarısız — tanı uygulamanın içinde
+
+Çökme düzeldikten sonra telefonda sıradaki engel çıktı: uygulama açılıyor,
+paylaş menüsü ve link ayıklama **çalışıyor**, ama `YoutubeDL.init()`
+başarısız oluyor.
+
+🔴 **Cihaz `adb`'ye bağlanamıyor** (Redmi Note 9 Pro, USB hata ayıklama
+kapalı — Windows onu yalnızca MTP aygıtı olarak görüyor). Yani logcat yok.
+Bu yüzden **tanı uygulamanın içine kondu**: kurulum başarısız olduğunda
+`MotorKopru.ortamRaporu()` şunları topluyor —
+
+- cihaz modeli, Android sürümü, **`Build.SUPPORTED_ABIS`**
+- `nativeLibraryDir` listesi — 🔑 gömülü ikililer kurulumda diske
+  **açılmış mı?** Açılmamışsa `init()` zaten çalışamaz.
+- boş alan (açma işlemi ~150 MB istiyor)
+- istisnanın **tüm sebep zinciri** — `YoutubeDLException` asıl sebebi
+  (IOException, ZipException) sarmalıyor ve dıştaki mesaj çoğu zaman boş
+
+Rapor Ayarlar → "Sorun" bölümünde, **kopyalanabilir** halde duruyor.
+Kullanıcıya kendiliğinden gösterilmiyor (yığın izi kimseye bir şey
+söylemez), ama bildirirken iletilebiliyor.
+
+Ayrıca **"Motoru yeniden başlat"** eklendi: kurulum geçici bir sebeple
+(yer yoktu, sonra açıldı) başarısız olduysa uygulamayı kapatıp açmaya
+gerek kalmıyor. `MotorKopru.kur()` artık yeniden çağrılabilir
+(`kurulumSuruyor` ile çift çalışma engelli).
+
+#### Paketleme tarafı elendi
+
+Yayınlanan APK incelendi, üçü de doğru: `extractNativeLibs=true`,
+kütüphaneler DEFLATE ile sıkıştırılmış (yani kurulumda diske açılıyor),
+`lib/arm64-v8a/` altında `libpython.zip.so` · `libffmpeg.zip.so` ·
+`libqjs.so` eksiksiz. Cihaz da arm64. **Sorun paketlemede değil,
+çalışma anında.**
+
 ### `MotorKopru.kt` — neden böyle yazıldı
 
 - `getInfo`/`execute` **bloklayan** çağrılar → 2 iş parçacıklı havuz.

@@ -175,6 +175,8 @@ class _AnaKabukState extends State<AnaKabuk> {
         motor: widget.motor,
         kuyruk: _kuyruk,
         guncelleme: _guncelleme,
+        motorDurumu: _motorDurumu,
+        motoruYenidenDene: _motoruBekle,
       ),
     ];
 
