@@ -540,6 +540,70 @@ kolay ama yanlış.
    (`updateYoutubeDL`) zaten vardı; eksik olan kullanıcıyı oraya
    yönlendirmekti.
 
+### 4.8 🔴 "Dosya bulunamadı" — iki belirti, tek sebep
+
+Telefonda: indirme "tamamlandı görünüyor" ama dosya galeriye düşmüyor **ve**
+geçmiş listesi boş kalıyor.
+
+🔑 **İkisi aynı sebebin iki yüzü.** Kullanıcının gördüğü "tamamlandı"
+aslında bizim hata metnimizdi: *"İndirme tamamlandı ama dosya bulunamadı."*
+`hata` durumundaki iş `_gecmiseTasi`'ya hiç ulaşmıyor → geçmiş boş; dosya
+da hiç oluşmadığı için galeriye çıkacak bir şey yok.
+
+**Kök neden: çıktıyı "klasörde yeni ne oluştu" farkıyla bulmak.**
+Bütün işler tek klasörü paylaşıyordu ve bu, aynı gönderi ikinci kez
+indirilince çöküyor:
+
+- yt-dlp aynı adda dosya görünce indirmeyi **atlıyor**
+  (*"has already been downloaded"*) → yeni dosya yok;
+- başarısız bir denemeden kalan parçalar "önceki" sayıldığı için bir
+  sonraki indirme kayboluyor.
+
+Test ederken aynı Reels'i tekrar tekrar denemek en doğal şey — yani bu
+hata **tam da test sırasında** ortaya çıkıyor.
+
+**Çözüm: her iş kendi klasörüne iniyor** (`<indirilenler>/<isKimlik>/`).
+Boş klasöre inince belirsizlik kalmıyor: içeride ne varsa bizimdir.
+Klasör iş bitince siliniyor — dışarı çıkarılamayan dosya hariç, o
+korunuyor.
+
+- `inenDosya()` **en büyük** dosyayı alıyor (birleştirme kalıntıları
+  küçük olur) ve `.part` / `.ytdl` / `.temp` uzantılarını eliyor.
+- Eski `yariminKalanlariSil` gereksizleşti; klasörün tamamı siliniyor.
+
+#### `IS_PENDING` tuzağı
+
+`MedyaKaydedici`, MediaStore kaydını `IS_PENDING=1` ile açıp kopyalama
+bitince temizliyor. **Temizlenmezse dosya galeride görünmez** — kayıt
+"hâlâ yazılıyor" sayılır. `update()` sonucu kontrol edilmiyordu; artık
+1 satır dönmezse hata sayılıyor, dosya uygulama klasöründe kalıyor ve
+arayüz "telefonun klasörlerine çıkarılamadı" diyor. Sessizce geçmek,
+"indirildi ama hiçbir yerde açılmıyor" tuzağını üretirdi.
+
+ℹ️ **`MediaScannerConnection.scanFile` API 29+ yolunda GEREKMİYOR** —
+kayıt zaten MediaStore'a yazılıyor, `IS_PENDING` temizlendiği anda
+görünür oluyor. Taramak ikinci bir kayıt riski taşır. API 28 ve altında
+düz dosya yazıldığı için tarama **şart** ve `eskiKaydet` onu yapıyor.
+
+#### Geçmiş kaydı izole edildi
+
+Dışa aktarma artık `indir` içinde **ayrı bir try** ile sarılı. İndirme
+bitti; galeriye taşıma patlasa bile bu "indirme başarısız" demek değil —
+ayrılmazsa iş hataya düşer ve kullanıcı indirdiği dosyayı listesinde hiç
+göremez. (`MedyaKaydedici` zaten kendi içinde `Throwable` yakalıyor; bu
+ikinci kat, ileride oradaki koruma bozulursa diye.)
+
+`test/kuyruk_test.dart` iki kuralı da tutuyor: dışa aktarma hatası
+geçmişe girmeyi **engellemiyor**, başarısız indirme ise geçmişe
+**girmiyor** ("İndirilenler" indirilmiş şeylerin listesi).
+
+#### Hata artık görünür
+
+yt-dlp'nin çıktısı atılıyordu; artık `YoutubeDLResponse` yakalanıp son
+satırları + klasör dökümü hata ayrıntısına konuyor. **Hatalı karta
+dokunmak** ayrıntıyı açıyor ve kopyalatıyor — motor kurulum hatasında
+aynı kalıp sorunu tek seferde çözdürmüştü.
+
 ### `MotorKopru.kt` — neden böyle yazıldı
 
 - `getInfo`/`execute` **bloklayan** çağrılar → 2 iş parçacıklı havuz.

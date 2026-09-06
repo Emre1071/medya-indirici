@@ -107,7 +107,24 @@ class MedyaKaydedici(private val baglam: Context) {
             val bitir = ContentValues().apply {
                 put(MediaStore.MediaColumns.IS_PENDING, 0)
             }
-            cozucu.update(adres, bitir, null, null)
+            val guncellenen = cozucu.update(adres, bitir, null, null)
+
+            // 🔴 Bu kontrol SART.
+            //
+            // `IS_PENDING` temizlenmezse dosya MediaStore'da "yazilmaya
+            // devam ediyor" olarak kaliyor ve galeride/muzik calarda
+            // GORUNMUYOR. Sonuc kullanici acisindan tam bir tuzak:
+            // uygulama "indirildi" diyor, dosya gercekten orada, ama
+            // hicbir yerde acilmiyor.
+            //
+            // Sessizce gecilseydi bu durumu anlamanin yolu yoktu; hata
+            // sayilinca dosya uygulama klasorunde kaliyor ve arayuz
+            // "telefonun klasorlerine cikarilamadi" uyarisini gosteriyor.
+            if (guncellenen != 1) {
+                throw IllegalStateException(
+                    "MediaStore kaydi yayimlanamadi (IS_PENDING temizlenmedi)"
+                )
+            }
         } catch (h: Throwable) {
             // Yarim kalan kayit siliniyor; birakilirsa oynaticilarda
             // acilmayan bos bir sarki olarak gorunurdu.
@@ -118,6 +135,15 @@ class MedyaKaydedici(private val baglam: Context) {
         // Kopya disari cikti, uygulamanin icindeki asil dosya artik gereksiz.
         // Silinmezse ayni dosya telefonda iki kez yer kaplardi.
         kaynak.delete()
+
+        // `MediaScannerConnection.scanFile` BURADA GEREKMIYOR.
+        //
+        // Tarayici, MediaStore'un haberi olmayan dosyalari kataloga
+        // eklemek icin. Burada kaydi zaten MediaStore'un kendisine
+        // yazdik; `IS_PENDING` temizlendigi anda dosya butun oynaticilara
+        // gorunur oluyor. Ayrica taramak bos yere ikinci bir kayit
+        // olusturma riski tasir. (API 28 ve altinda durum farkli — orada
+        // duz dosya yaziliyor ve tarama SART; bkz. `eskiKaydet`.)
         return Sonuc(adres.toString(), gorecelYol)
     }
 

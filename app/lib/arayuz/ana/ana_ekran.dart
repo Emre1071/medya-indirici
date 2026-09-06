@@ -91,6 +91,49 @@ class _AnaEkraniState extends State<AnaEkran> {
     FocusScope.of(context).unfocus();
   }
 
+  /// Basarisiz indirmenin teknik ayrintisini gosterir ve kopyalatir.
+  ///
+  /// Cihaz `adb`'ye baglanamadiginda (USB hata ayiklama kapali) yt-dlp'nin
+  /// ciktisina ulasmanin baska yolu yok. Ayni kalip motor kurulum hatasinda
+  /// da kullaniliyor ve orada sorunu tek seferde cozdurmustu.
+  void _ayrintiyiGoster(String ayrinti) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Renkler.yuzey,
+        title: const Text('İndirme neden olmadı'),
+        content: SingleChildScrollView(
+          child: SelectableText(
+            ayrinti,
+            style: const TextStyle(
+              fontSize: Olculer.etiket,
+              fontFamily: 'monospace',
+              height: 1.4,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Kapat'),
+          ),
+          FilledButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: ayrinti));
+              if (!context.mounted) return;
+              Navigator.of(context).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Panoya kopyalandı.')),
+              );
+            },
+            icon: const Icon(Icons.copy, size: 18),
+            label: const Text('Kopyala'),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Kaba bir kontrol — amac yanlis yapistirmayi yakalamak, adresi
   /// dogrulamak degil. Gercek dogrulamayi motor yapiyor; burada fazla
   /// katı davranmak, destekledigimiz ama kalibina uymayan adresleri
@@ -155,10 +198,16 @@ class _AnaEkraniState extends State<AnaEkran> {
                       itemBuilder: (context, i) {
                         final is_ = kuyruk[i];
 
+                        // Hatali iste karta dokunmak teknik ayrintiyi
+                        // aciyor. Kendiliginden gosterilmiyor (kullaniciya
+                        // bir sey soylemez) ama cihazdan log alinamadiginda
+                        // "indirme neden olmadi" sorusunun tek cevabi o.
+                        final ayrinti = is_.hataAyrinti;
+
                         // Calisan iste "durdur", bekleyen/bitmis iste
                         // "kuyruktan cikar". Ikisi de ayni cagriya gidiyor;
                         // hangisinin gerektigine kuyruk karar veriyor.
-                        return IsKarti(
+                        final kart = IsKarti(
                           is_: is_,
                           eylem: is_.calisyor
                               ? IconButton(
@@ -176,6 +225,14 @@ class _AnaEkraniState extends State<AnaEkran> {
                                   onPressed: () =>
                                       widget.kuyruk.sil(is_.kimlik),
                                 ),
+                        );
+
+                        if (ayrinti == null) return kart;
+                        return InkWell(
+                          borderRadius:
+                              BorderRadius.circular(Olculer.kose),
+                          onTap: () => _ayrintiyiGoster(ayrinti),
+                          child: kart,
                         );
                       },
                     ),

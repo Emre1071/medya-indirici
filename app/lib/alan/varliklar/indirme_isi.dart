@@ -68,6 +68,13 @@ class IndirmeIsi {
   /// Teknik yigin izi degil; ne yapabilecegini anlatan cumle.
   final String? hataMesaji;
 
+  /// Hatanin teknik ayrintisi (yt-dlp ciktisi, klasor dokumu).
+  ///
+  /// Kendiliginden gosterilmiyor — kullaniciya bir sey soylemez. Ama
+  /// karta dokununca kopyalanabiliyor: cihazdan log alinamadiginda
+  /// "indirme neden olmadi" sorusunun tek cevabi bu.
+  final String? hataAyrinti;
+
   const IndirmeIsi({
     required this.kimlik,
     required this.adres,
@@ -80,6 +87,7 @@ class IndirmeIsi {
     this.dosyaYolu,
     this.kayitYeri,
     this.hataMesaji,
+    this.hataAyrinti,
   });
 
   bool get bitmis => durum == IsDurumu.bitti;
@@ -110,6 +118,7 @@ class IndirmeIsi {
     String? dosyaYolu,
     String? kayitYeri,
     String? hataMesaji,
+    String? hataAyrinti,
   }) {
     return IndirmeIsi(
       kimlik: kimlik,
@@ -123,6 +132,7 @@ class IndirmeIsi {
       dosyaYolu: dosyaYolu ?? this.dosyaYolu,
       kayitYeri: kayitYeri ?? this.kayitYeri,
       hataMesaji: hataMesaji ?? this.hataMesaji,
+      hataAyrinti: hataAyrinti ?? this.hataAyrinti,
     );
   }
 }

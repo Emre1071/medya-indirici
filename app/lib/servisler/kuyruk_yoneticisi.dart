@@ -181,7 +181,12 @@ class KuyrukYoneticisi extends ChangeNotifier {
       if (_iptalIstenenler.contains(is_.kimlik)) return;
       _guncelle(
         is_.kimlik,
-        (i) => i.kopyala(durum: IsDurumu.hata, hataMesaji: e.mesaj),
+        (i) => i.kopyala(
+          durum: IsDurumu.hata,
+          hataMesaji: e.mesaj,
+          // Ham ayrinti saklaniyor: kullanici karta dokunup kopyalayabilsin.
+          hataAyrinti: e.ayrinti,
+        ),
       );
     } catch (e) {
       if (_iptalIstenenler.contains(is_.kimlik)) return;

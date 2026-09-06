@@ -450,17 +450,27 @@ class MotorKopru(private val baglam: Context) {
         if (!hazirDegilseHataVer(cevap)) return
 
         havuz.execute {
-            val klasor = File(hedefKlasor).apply { mkdirs() }
-
-            // Indirmeden ONCE klasorde ne varsa not ediliyor. Sebep:
-            // yt-dlp uretilen dosyanin yolunu geriye dondurmuyor; dosya
-            // adini basliktan tahmin etmek ise uzanti ve temizleme
-            // kurallari yuzunden guvenilmez. Sonradan "yeni ne olustu"
-            // diye bakmak kesin sonuc veriyor.
+            // HER IS KENDI KLASORUNE INIYOR.
             //
-            // `try` blogunun DISINDA duruyorlar: iptal temizligi de bu
-            // listeye ihtiyac duyuyor ve o kod `catch` icinde calisiyor.
-            val oncekiler = klasor.list()?.toSet() ?: emptySet()
+            // Once butun isler tek klasoru paylasiyordu ve inen dosya
+            // "indirmeden once/sonra klasorde ne var" farkiyla bulunuyordu.
+            // Bu, ayni gonderi ikinci kez indirildiginde COKUYOR:
+            //
+            //  - yt-dlp ayni adda dosya gorunce indirmeyi ATLIYOR
+            //    ("has already been downloaded"), yeni dosya olusmuyor;
+            //  - basarisiz bir denemeden kalan parcalar da "onceki"
+            //    sayildigi icin bir sonraki indirme kaybediliyor.
+            //
+            // Sonuc: "İndirme tamamlandı ama dosya bulunamadı" hatasi,
+            // dosya disari cikmiyor ve is gecmise de girmiyor.
+            //
+            // Bos bir klasore inince belirsizlik kalmiyor: iceride ne
+            // varsa bizimdir.
+            val klasor = File(hedefKlasor, isKimlik).apply { mkdirs() }
+
+            // Disari cikarilamayan dosya SILINMEZ; kullanici en azindan
+            // uygulama icinden ulasabilsin diye klasoru koruyoruz.
+            var klasoruKoru = false
 
             try {
                 val istek = YoutubeDLRequest(adres)
@@ -499,22 +509,47 @@ class MotorKopru(private val baglam: Context) {
                     istek.addOption("--user-agent", MASAUSTU_TARAYICI)
                 }
 
-                YoutubeDL.getInstance().execute(istek, isKimlik) { yuzde, kalanSaniye, satir ->
-                    ilerlemeYolla(isKimlik, yuzde, kalanSaniye, satir)
-                }
+                // Ciktisi saklaniyor: indirme "bitti" gorunup dosya
+                // olusmadiginda sebebi yalnizca yt-dlp'nin kendi satirlari
+                // soyluyor (atlandi mi, format bulunamadi mi, birlestirme
+                // mi patladi). Onu atmak, taniyi imkansiz kiliyordu.
+                val yanit = YoutubeDL.getInstance()
+                    .execute(istek, isKimlik) { yuzde, kalanSaniye, satir ->
+                        ilerlemeYolla(isKimlik, yuzde, kalanSaniye, satir)
+                    }
 
-                val yeniDosya = yeniDosyalar(klasor, oncekiler).firstOrNull()
+                val yeniDosya = inenDosya(klasor)
 
                 if (yeniDosya == null) {
+                    val ayrinti = indirmeRaporu(klasor, yanit?.out, yanit?.err)
+                    Log.e(ETIKET, "Dosya olusmadi\n$ayrinti")
                     anaIsParcacigi.post {
                         cevap.error("DOSYA_BULUNAMADI",
-                            "İndirme bitti ama dosya oluşmadı", null)
+                            "İndirme bitti ama dosya oluşmadı", ayrinti)
                     }
                 } else {
                     // Dosya ancak burada, indirme TAMAMLANDIKTAN sonra
                     // telefonun ortak klasorune cikiyor. Indirme sirasinda
                     // cikarilsaydi yarim dosya muzik calarda gorunurdu.
-                    val sonuc = kaydedici.kaydet(yeniDosya, tur == "ses")
+                    // Disari cikarma AYRI bir try icinde.
+                    //
+                    // Indirme bitti; galeriye tasima adimi patlasa bile bu
+                    // "indirme basarisiz" demek DEGIL. Ayrilmazsa hata
+                    // disariya sizip isi hataya dusuruyor ve is gecmise hic
+                    // girmiyor — kullanici indirdigi dosyayi listesinde
+                    // goremiyor. `MedyaKaydedici` zaten kendi icinde
+                    // Throwable yakaliyor; bu ikinci kat, ileride oradaki
+                    // koruma bozulursa diye.
+                    val sonuc = try {
+                        kaydedici.kaydet(yeniDosya, tur == "ses")
+                    } catch (h: Throwable) {
+                        Log.e(ETIKET, "Disari cikarma basarisiz", h)
+                        MedyaKaydedici.Sonuc(yeniDosya.absolutePath, null)
+                    }
+
+                    // Disari cikarilamadiysa dosya yerinde birakiliyor.
+                    klasoruKoru = sonuc.kayitYeri == null
+
                     anaIsParcacigi.post {
                         cevap.success(
                             mapOf(
@@ -530,10 +565,6 @@ class MotorKopru(private val baglam: Context) {
                 val iptalMi = iptalEdilenler.remove(isKimlik)
 
                 if (iptalMi) {
-                    // Yarim inen dosyalar siliniyor. Birakilirsa bir sonraki
-                    // indirmede "yeni olusan dosya" aramasi onlari bulur ve
-                    // yanlis dosyayi kullaniciya teslim ederdi.
-                    yariminKalanlariSil(klasor, oncekiler)
                     Log.i(ETIKET, "Indirme iptal edildi: $isKimlik")
                     anaIsParcacigi.post {
                         cevap.error("IPTAL_EDILDI", "Indirme iptal edildi", null)
@@ -541,38 +572,72 @@ class MotorKopru(private val baglam: Context) {
                 } else {
                     Log.e(ETIKET, "Indirme hatasi: $adres", h)
                     anaIsParcacigi.post {
-                        cevap.error("INDIRME_HATASI", h.message, null)
+                        cevap.error("INDIRME_HATASI", h.message, hataZinciri(h))
                     }
                 }
             } finally {
                 iptalEdilenler.remove(isKimlik)
+
+                // Is klasoru artik gereksiz: dosya ya disari cikti ya da
+                // indirme basarisiz oldu. Yarim parcalar (`.part`,
+                // birlestirme kirintilari) burada gidiyor.
+                if (!klasoruKoru) {
+                    try {
+                        klasor.deleteRecursively()
+                    } catch (h: Throwable) {
+                        Log.w(ETIKET, "Is klasoru silinemedi", h)
+                    }
+                }
             }
         }
     }
 
-    /** Indirme baslamadan once orada olmayan dosyalar. */
-    private fun yeniDosyalar(klasor: File, oncekiler: Set<String>): List<File> =
-        klasor.listFiles()?.filter { it.name !in oncekiler } ?: emptyList()
+    /**
+     * Is klasorunde olusan asil dosya.
+     *
+     * Klasor bu ise ozel ve bos basliyor, yani icindeki her sey bizim.
+     * Yine de secim yapmak gerekiyor: birlestirme sirasinda gecici
+     * parcalar kalabiliyor. **En buyuk dosya** aliniyor — birlestirilmis
+     * sonuc her zaman parcalarindan buyuk. Yarim indirme uzantilari
+     * bastan eleniyor.
+     */
+    private fun inenDosya(klasor: File): File? =
+        klasor.listFiles()
+            ?.filter { it.isFile && it.length() > 0 }
+            ?.filterNot {
+                val ad = it.name.lowercase()
+                ad.endsWith(".part") || ad.endsWith(".ytdl") ||
+                    ad.endsWith(".temp") || ad.endsWith(".tmp")
+            }
+            ?.maxByOrNull { it.length() }
 
     /**
-     * Iptal edilen indirmenin geride biraktigi dosyalari siler.
+     * "Dosya olusmadi" durumunda ne oldugunu anlatan rapor.
      *
-     * yt-dlp yarim indirmeyi `.part` uzantisiyla birakiyor, birlestirme
-     * asamasinda ise gecici parcalar olusuyor. Hicbiri calisan bir dosya
-     * degil; telefonda yer kaplamalari disinda bir islevleri yok.
+     * Cihazdan log alinamadigi icin (USB hata ayiklama kapali) sebebi
+     * gosterebilecek tek sey yt-dlp'nin kendi ciktisi. Kullanici bunu
+     * arayuzden kopyalayip iletebiliyor.
      */
-    private fun yariminKalanlariSil(klasor: File, oncekiler: Set<String>) {
-        try {
-            yeniDosyalar(klasor, oncekiler).forEach { dosya ->
-                if (dosya.delete()) {
-                    Log.i(ETIKET, "Yarim dosya silindi: ${dosya.name}")
-                }
-            }
-        } catch (h: Throwable) {
-            // Temizlik basarisiz olsa da kullanici acisindan is bitti;
-            // hata gostermek anlamsiz olurdu.
-            Log.w(ETIKET, "Yarim dosyalar silinemedi", h)
+    private fun indirmeRaporu(klasor: File, cikti: String?, hata: String?): String {
+        val yazi = StringBuilder("Klasor: ${klasor.absolutePath}\n")
+
+        val dosyalar = klasor.listFiles()
+        if (dosyalar == null || dosyalar.isEmpty()) {
+            yazi.append("Klasor BOS — yt-dlp hic dosya uretmedi\n")
+        } else {
+            dosyalar.forEach { yazi.append("  ${it.name}  ${it.length()} bayt\n") }
         }
+
+        // Yalnizca son satirlar: yt-dlp uzun ilerleme dokumu basiyor ve
+        // anlamli olan sonu.
+        sonSatirlar(cikti)?.let { yazi.append("\nyt-dlp ciktisi:\n").append(it) }
+        sonSatirlar(hata)?.let { yazi.append("\nyt-dlp hatasi:\n").append(it) }
+        return yazi.toString()
+    }
+
+    private fun sonSatirlar(metin: String?, adet: Int = 12): String? {
+        if (metin.isNullOrBlank()) return null
+        return metin.trim().lines().takeLast(adet).joinToString("\n")
     }
 
     // -------------------------------------------------------------- yardimci

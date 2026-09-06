@@ -159,8 +159,40 @@ void main() {
     motor.bitir(kimlik, const IndirmeSonucu(yol: '/veri/uygulama/ses.m4a'));
     await soluklan();
 
+    // ASIL SART: gecmise YINE DE giriyor.
+    //
+    // Dosya indi; galeriye tasima adiminin patlamasi "indirme basarisiz"
+    // demek degil. Ayrilmazsa is hataya duser ve kullanici indirdigi
+    // dosyayi listesinde hic goremez.
+    expect(kuyruk.gecmis, hasLength(1),
+        reason: 'disari cikarma hatasi gecmise girmeyi engellememeli');
+    expect(kuyruk.gecmis.single.durum, IsDurumu.bitti);
     expect(kuyruk.gecmis.single.kayitYeri, isNull,
         reason: 'arayuz "telefonda gorunmuyor" uyarisini buna gore veriyor');
+  });
+
+  test('basarisiz indirme gecmise GIRMIYOR ama ayrintiyi tasiyor', () async {
+    final kimlik = kuyruk.ekle('https://instagram.com/reel/1', IndirmeTuru.ses);
+    await soluklan();
+
+    motor.hataVer(
+      kimlik,
+      const MotorHatasi(
+        'İndirme tamamlandı ama dosya bulunamadı.',
+        'Klasor BOS — yt-dlp hic dosya uretmedi',
+      ),
+    );
+    await soluklan();
+
+    // "İndirilenler" indirilmis seylerin listesi; inmemis bir sey oraya
+    // girmemeli.
+    expect(kuyruk.gecmis, isEmpty);
+
+    final is_ = kuyruk.kuyruk.single;
+    expect(is_.durum, IsDurumu.hata);
+    // Ham ayrinti saklaniyor: cihazdan log alinamadiginda taninin tek
+    // kaynagi bu ve kullanici karta dokunup kopyalayabiliyor.
+    expect(is_.hataAyrinti, contains('yt-dlp hic dosya uretmedi'));
   });
 }
 
@@ -243,6 +275,10 @@ class _KontrolluMotor implements IndirmeMotoru {
 
   void bitir(String isKimlik, IndirmeSonucu sonuc) {
     _bekleyenler.remove(isKimlik)?.complete(sonuc);
+  }
+
+  void hataVer(String isKimlik, MotorHatasi hata) {
+    _bekleyenler.remove(isKimlik)?.completeError(hata);
   }
 
   void ilerlemeYolla(String isKimlik, IsDurumu durum, double oran) {
