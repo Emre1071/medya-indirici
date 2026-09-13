@@ -10,11 +10,11 @@
 > 🔒 **Bu dosya işle birlikte güncellenir** — her kritik değişiklik, hata
 > çözümü ve sürüm yükseltmesinden sonra. Kuralın tamamı §8 başında.
 >
-> Son güncelleme: 2026-09-14 — **üç yapısal düzeltme kodda** (cihazda
-> denenmedi): Instagram kararsızlığı §4.9, dosya açma + çıkarma tanısı
-> §4.10, **kalıcı geçmiş** §4.11. Testler 62. Sürüm **`0.1.3+4`**'e
-> yükseltildi (versionCode 2004); **derleme ve yayın henüz yapılmadı**,
-> telefondaki hâlâ v0.1.2.
+> Son güncelleme: 2026-09-14 — **v0.1.3 yayında** (commit `94443f6`,
+> versionCode 2004, arm64 APK 59,5 MB). İçeriği: Instagram kararsızlığı
+> §4.9, dosya açma + çıkarma tanısı §4.10, **kalıcı geçmiş** §4.11.
+> Testler 62. 🔴 **Hiçbiri cihazda denenmedi** — telefondaki hâlâ v0.1.2,
+> önce OTA ile v0.1.3 kurulmalı (§7 sonundaki 7 madde).
 > Öncesi: OTA doğrulandı (v0.1.1), ses ikonu §6, R8 §4.6, çökme §4.4-§4.5,
 > paylaş menüsü §4.3, imza anahtarı §12, derleme engeli §10.
 
@@ -853,8 +853,8 @@ eski cihaz için. `YtDlpMotoru({this.mp3Zorla = false})`.
   (§9). x86/x86_64 hâlâ dışarıda (yalnız emülatör için, her biri ~25 MB
   Python+ffmpeg ekliyor); emülatör gerekirse komuta `android-x64` eklenir.
   Release'e yüklenecek dosya: `app-arm64-v8a-release.apk`.
-- ✅ **Doğrulanmış APK boyutları:** arm64-v8a **59,1 MB**,
-  armeabi-v7a **52,3 MB** (release). `PLAN.md` §7'deki 70-150 MB tahmininin
+- ✅ **Doğrulanmış APK boyutları:** arm64-v8a **59,5 MB**,
+  armeabi-v7a **52,7 MB** (v0.1.3 release; v0.1.2'de 59,1 / 52,3). `PLAN.md` §7'deki 70-150 MB tahmininin
   altında. Yine de Supabase'in 50 MB yükleme sınırının **üstünde** — dağıtımın
   GitHub Releases'e taşınmasının sebebi bu (§5).
 - `aria2c` **bilerek eklenmedi** — boyut ekliyor, CDN'ler zaten hızlı.
@@ -1217,7 +1217,7 @@ yazılır, derleme orada koşar. Bu bir çözüm değil, ölçüm yöntemi.
 | GitHub CLI (`gh` 2.100.0) + oturum (`Emre1071`) | ✅ |
 | Uzak depo — **github.com/Emre1071/medya-indirici** (public) | ✅ push edildi |
 | Kalıcı imza anahtarı | ✅ §12 |
-| **Yayındaki sürüm: `v0.1.3`** | 🔶 kodda hazır (`0.1.3+4`), derleme ve yayın **yapılmadı** |
+| **Yayındaki sürüm: `v0.1.3`** | ✅ APK + `mapping.txt` ekli, commit `94443f6` |
 
 Release: <https://github.com/Emre1071/medya-indirici/releases/tag/v0.1.3>
 
@@ -1228,6 +1228,19 @@ Sürüm geçmişi: `v0.1.0` (bozuk) → `v0.1.1` (çökme + indirme düzeltmeler
 
 ⚠️ **v0.1.3 telefona kurulana kadar §4.9-§4.11'in hiçbiri denenmiş
 sayılmaz** — telefondaki v0.1.2 bunların hiçbirini içermiyor.
+
+✅ **v0.1.3 uçtan uca doğrulandı** (uygulamanın gittiği API'ye sorularak):
+`tag_name = v0.1.3` · taslak/ön-sürüm değil · `target_commitish` = `94443f6`
+(APK'nın kaynağı) · `app-arm64-v8a-release.apk` istemcinin arm64 süzgecine
+takılıyor · `mapping.txt` ekli · Türkçe notlar bozulmamış.
+
+🔑 **Release commit'e bağlanmalı.** `gh release create` varsayılan olarak
+deponun o anki HEAD'ini etiketliyor; kod push'lanmadan yayın alınırsa
+etikette **APK'nın kaynağı bulunmaz** ve o sürümün çökme raporu
+`mapping.txt` ile eşleşse bile koda bağlanamaz. Bu yüzden önce
+commit + push, sonra `--target <TAM SHA>`.
+⚠️ `--target` **kısa SHA kabul etmiyor** — `Release.target_commitish is
+invalid` (HTTP 422) veriyor. `git rev-parse main` çıktısı kullanılmalı.
 
 ⚠️ **`v0.1.0` bozuk** — R8 düzeltmelerinden önce alınmıştı, açılır açılmaz
 çöküyor. Kimseye o link verilmemeli. (Silinmedi: tarihî kayıt, ve
