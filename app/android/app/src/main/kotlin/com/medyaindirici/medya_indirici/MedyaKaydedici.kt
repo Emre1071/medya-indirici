@@ -61,11 +61,23 @@ class MedyaKaydedici(private val baglam: Context) {
      *   `content://` adresidir (kapsamli depolamada duz yol yok).
      * @param kayitYeri Kullaniciya gosterilecek klasor (`Music/Medya İndirici`).
      *   `null` ise cikarma basarisiz oldu, dosya uygulamanin icinde kaldi.
+     * @param hataAyrinti Cikarma basarisizsa **sebebin ham metni**.
+     *   `kayitYeri` doluyken `null`.
      */
-    data class Sonuc(val yol: String, val kayitYeri: String?)
+    data class Sonuc(
+        val yol: String,
+        val kayitYeri: String?,
+        val hataAyrinti: String? = null,
+    )
 
     fun kaydet(kaynak: File, sesMi: Boolean): Sonuc {
-        if (!kaynak.exists()) return Sonuc(kaynak.absolutePath, null)
+        if (!kaynak.exists()) {
+            return Sonuc(
+                kaynak.absolutePath,
+                null,
+                "Cikarilacak dosya bulunamadi: ${kaynak.absolutePath}",
+            )
+        }
 
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -75,9 +87,58 @@ class MedyaKaydedici(private val baglam: Context) {
             }
         } catch (h: Throwable) {
             // Cikarma basarisiz: dosya yerinde kaliyor, indirme kaybolmuyor.
+            //
+            // 🔑 SEBEP ARTIK KAYBOLMUYOR. Eskiden yalnizca `Log.e`'ye
+            // gidiyordu; cihaz `adb`'ye baglanmadigi icin (USB hata
+            // ayiklama kapali) o satir hic okunamiyordu ve "galeride
+            // gorunmuyor" sikayetinin sebebi hicbir zaman ogrenilemiyordu.
+            // Ayni kalip motor kurulum hatasinda sorunu tek seferde
+            // cozdurmustu.
             Log.e(ETIKET, "Dosya disari cikarilamadi: ${kaynak.name}", h)
-            Sonuc(kaynak.absolutePath, null)
+            Sonuc(kaynak.absolutePath, null, cikarmaRaporu(kaynak, sesMi, h))
         }
+    }
+
+    /**
+     * Cikarma basarisiz oldugunda ortamin fotografi.
+     *
+     * Yigin izi tek basina yetmiyor: hatanin sebebi cogu zaman **ne
+     * gonderdigimizde** (ad, MIME, hedef klasor) saklı. Uc sey birlikte
+     * yazilmazsa telefondan gelen rapor okunamaz kaliyor.
+     */
+    private fun cikarmaRaporu(kaynak: File, sesMi: Boolean, h: Throwable): String {
+        val yazi = StringBuilder()
+        yazi.append("Dosya: ${kaynak.name}\n")
+        yazi.append("Boyut: ${kaynak.length()} bayt\n")
+        yazi.append("Hedef: ${anaKlasor(sesMi)}/$KLASOR\n")
+        yazi.append("MIME: ${mimeTuru(kaynak, sesMi)}\n")
+        yazi.append("Kayit adi: ${kayitAdi(kaynak, sesMi)}\n")
+        yazi.append("Android: ${Build.VERSION.SDK_INT}\n")
+        yazi.append("Bos alan: ${kaynak.usableSpace} bayt\n\n")
+        yazi.append(sebepZinciri(h))
+        return yazi.toString()
+    }
+
+    /**
+     * Istisnanin **butun sebep zinciri**.
+     *
+     * MediaStore hatalari sarmalanarak geliyor ve distaki mesaj cogu zaman
+     * bos; asil cumle (`Mismatched extension`, `ENOSPC`, `Invalid file
+     * name`) iki kat iceride duruyor. `MotorKopru` ayni yaklasimi kullaniyor.
+     */
+    private fun sebepZinciri(h: Throwable): String {
+        val yazi = StringBuilder()
+        var sira: Throwable? = h
+        var derinlik = 0
+        while (sira != null && derinlik < 6) {
+            yazi.append(if (derinlik == 0) "" else "  sebep: ")
+            yazi.append(sira.javaClass.simpleName)
+            sira.message?.let { yazi.append(": ").append(it) }
+            yazi.append('\n')
+            sira = sira.cause
+            derinlik++
+        }
+        return yazi.toString()
     }
 
     // ------------------------------------------------------- Android 10+
@@ -93,8 +154,7 @@ class MedyaKaydedici(private val baglam: Context) {
         val gorecelYol = "${anaKlasor(sesMi)}/$KLASOR"
         val mime = mimeTuru(kaynak, sesMi)
 
-        val adres = kayitAc(koleksiyon, kaynak.name, mime, gorecelYol)
-            ?: throw IllegalStateException("MediaStore kaydi acilamadi")
+        val adres = kayitAc(koleksiyon, kayitAdi(kaynak, sesMi), mime, gorecelYol)
 
         try {
             // Kopyalama bitene kadar kayit "beklemede": yarim dosya bu sure
@@ -161,9 +221,18 @@ class MedyaKaydedici(private val baglam: Context) {
         dosyaAdi: String,
         mime: String,
         gorecelYol: String,
-    ): Uri? {
+    ): Uri {
         val govde = dosyaAdi.substringBeforeLast('.', dosyaAdi)
         val uzanti = dosyaAdi.substringAfterLast('.', "")
+
+        // 🔑 SON ISTISNA SAKLANIYOR.
+        //
+        // Eskiden dongu icindeki her hata yalnizca `Log.w`'ya gidiyor,
+        // dongu tukendiginde de icerigi olmayan bir "kayit acilamadi"
+        // firlatiliyordu. Yani asil cumle — `Mismatched extension`,
+        // `Invalid file name`, `ENOSPC` — hicbir yere ulasmiyordu.
+        // Ad cakismasi disindaki sebepler de ayni sessiz yoldan gidiyordu.
+        var sonHata: Throwable? = null
 
         for (deneme in 0 until AD_DENEME_SINIRI) {
             val ad = when {
@@ -182,13 +251,18 @@ class MedyaKaydedici(private val baglam: Context) {
             try {
                 val adres = baglam.contentResolver.insert(koleksiyon, degerler)
                 if (adres != null) return adres
+                sonHata = IllegalStateException("insert() null dondu ($ad)")
             } catch (h: Throwable) {
-                // Yalnizca ad cakismasi bekleniyor; dongu bir sonraki adi
-                // deneyecek. Son denemede de olmazsa cagiran taraf hata alir.
+                // Ad cakismasi bekleniyor; dongu bir sonraki adi deneyecek.
                 Log.w(ETIKET, "Kayit acilamadi ($ad), yeni ad denenecek", h)
+                sonHata = h
             }
         }
-        return null
+
+        throw IllegalStateException(
+            "MediaStore kaydi acilamadi ($AD_DENEME_SINIRI ad denendi)",
+            sonHata,
+        )
     }
 
     // -------------------------------------------------------- Android 9-
@@ -202,7 +276,13 @@ class MedyaKaydedici(private val baglam: Context) {
             // Izin yoksa dosyaya dokunmuyoruz. Kullaniciya "indirildi ama
             // bulamazsin" demek, arayuzun isi.
             Log.w(ETIKET, "Depolama izni yok, dosya disari cikarilmadi")
-            return Sonuc(kaynak.absolutePath, null)
+            return Sonuc(
+                kaynak.absolutePath,
+                null,
+                "WRITE_EXTERNAL_STORAGE izni verilmemis (Android " +
+                    "${Build.VERSION.SDK_INT}). Uygulama ayarlarindan " +
+                    "depolama iznini acip tekrar indir.",
+            )
         }
 
         val gorecelYol = "${anaKlasor(sesMi)}/$KLASOR"
@@ -213,7 +293,7 @@ class MedyaKaydedici(private val baglam: Context) {
             throw IllegalStateException("Klasor acilamadi: ${klasor.absolutePath}")
         }
 
-        val hedef = bosDosyaAdi(klasor, kaynak.name)
+        val hedef = bosDosyaAdi(klasor, kayitAdi(kaynak, sesMi))
         kaynak.copyTo(hedef, overwrite = false)
         kaynak.delete()
 
@@ -255,7 +335,23 @@ class MedyaKaydedici(private val baglam: Context) {
      * MediaStore bunu **zorunlu** tutuyor ve yanlis deger dosyanin yanlis
      * kategoriye dusmesine yol aciyor (ses dosyasi videolarda gorunmek
      * gibi). Once kendi tablomuz: yt-dlp'nin verdigi uzantilar belli ve
-     * sistemin `MimeTypeMap`'i `opus` gibi bazilarini bilmiyor.
+     * sistemin `MimeTypeMap`'i bazilarini bilmiyor.
+     *
+     * ⚠️ **Tablo Android'in KENDI eslemesiyle ayni olmak zorunda.**
+     * MediaProvider, `DISPLAY_NAME`'in uzantisi ile `MIME_TYPE`
+     * uyusmadiginda kendi kararini dayatiyor: ya ada ikinci bir uzanti
+     * ekliyor ya da inserti tamamen reddediyor. Iki eski deger bu yuzden
+     * degisti:
+     *
+     * | Uzanti | Onceden | Android'in tablosu | Sonuc |
+     * |---|---|---|---|
+     * | `.opus` | `audio/opus` | `audio/ogg` | uyusmazlik |
+     * | `.webm` (ses) | `audio/webm` | `video/webm` | uyusmazlik |
+     *
+     * Bu **en sik karsilasilan durum**, istisna degil: `mp3Zorla`
+     * varsayilan kapali oldugu icin inen ses dosyasi cogu zaman tam da
+     * `.opus` veya `.webm` oluyor. Ses `.webm` icin ad `.weba`'ya
+     * ceviriliyor ([kayitAdi]) — AOSP'nin ses-webm uzantisi o.
      */
     private fun mimeTuru(dosya: File, sesMi: Boolean): String {
         val uzanti = dosya.extension.lowercase()
@@ -264,15 +360,16 @@ class MedyaKaydedici(private val baglam: Context) {
             "mp3" -> "audio/mpeg"
             "m4a", "m4b" -> "audio/mp4"
             "aac" -> "audio/aac"
-            "opus" -> "audio/opus"
-            "ogg", "oga" -> "audio/ogg"
+            // AOSP `mime.types`: `audio/ogg  oga ogg opus`
+            "opus", "ogg", "oga" -> "audio/ogg"
             "flac" -> "audio/flac"
             "wav" -> "audio/wav"
             "mp4", "m4v" -> "video/mp4"
             "mkv" -> "video/x-matroska"
             "3gp" -> "video/3gpp"
+            "weba" -> "audio/webm"
             // webm hem ses hem video olabiliyor; yt-dlp'den hangisini
-            // istedigimizi biliyoruz.
+            // istedigimizi biliyoruz. Ses ise ad da `.weba`'ya ceviriliyor.
             "webm" -> if (sesMi) "audio/webm" else "video/webm"
             else -> null
         }
@@ -283,5 +380,30 @@ class MedyaKaydedici(private val baglam: Context) {
 
         // Bilinmeyen uzanti: turu dogru kategoriye dusurecek genel bir deger.
         return if (sesMi) "audio/mpeg" else "video/mp4"
+    }
+
+    /**
+     * MediaStore'a verilecek `DISPLAY_NAME`.
+     *
+     * Ham dosya adi yt-dlp'nin **basliktan** urettigi ad
+     * (`%(title).100s.%(ext)s`). Instagram'da baslik = alt yazi, yani
+     * icinde satir sonu, sekme ve gorunmez bicimlendirme karakterleri
+     * olabiliyor. MediaProvider bu adi reddedebiliyor ve red, kullaniciya
+     * "galeride gorunmuyor" olarak yansiyordu.
+     *
+     * Iki is yapiliyor:
+     * 1. Kontrol karakterleri bosluga cevriliyor, bosluklar sadelestiriliyor.
+     * 2. Ses `.webm` uzantisi `.weba`'ya ceviriliyor — gerekcesi [mimeTuru].
+     */
+    private fun kayitAdi(dosya: File, sesMi: Boolean): String {
+        val temiz = dosya.name
+            .map { if (it.isISOControl()) ' ' else it }
+            .joinToString("")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .ifEmpty { if (sesMi) "ses" else "video" }
+
+        if (!sesMi || !temiz.endsWith(".webm", ignoreCase = true)) return temiz
+        return temiz.dropLast(5) + "weba"
     }
 }

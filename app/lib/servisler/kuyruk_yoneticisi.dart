@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../alan/varliklar/indirme_isi.dart';
 import '../alan/varliklar/medya_bilgisi.dart';
+import 'gecmis_deposu.dart';
 import 'indirme_motoru.dart';
 
 /// Indirme kuyrugunu tutar ve sirayla isletir.
@@ -19,7 +22,19 @@ import 'indirme_motoru.dart';
 class KuyrukYoneticisi extends ChangeNotifier {
   final IndirmeMotoru motor;
 
-  KuyrukYoneticisi(this.motor);
+  /// Gecmisi diske yazan katman. Verilmezse gecmis yalniz bellekte durur —
+  /// testler bu yoldan gidiyor.
+  final GecmisDeposu? depo;
+
+  KuyrukYoneticisi(this.motor, {this.depo});
+
+  /// Gecmiste tutulan en fazla kayit sayisi.
+  ///
+  /// Sinir olmadan liste yillar icinde binlerce satira cikar; her satir
+  /// kapak adresi ve baslik tasidigi icin hem dosya buyur hem de acilista
+  /// cozumleme uzar. En eskisi dusuyor — kullanicinin aradigi sey
+  /// neredeyse her zaman son indirdigi.
+  static const int kayitSiniri = 200;
 
   final List<IndirmeIsi> _kuyruk = [];
   final List<IndirmeIsi> _gecmis = [];
@@ -46,6 +61,50 @@ class KuyrukYoneticisi extends ChangeNotifier {
   List<IndirmeIsi> get kuyruk => List.unmodifiable(_kuyruk);
   List<IndirmeIsi> get gecmis => List.unmodifiable(_gecmis);
   bool get mesgul => _calisanKimlik != null;
+
+  /// Kalici gecmisi okur. Acilista **bir kez** cagriliyor.
+  ///
+  /// 🔑 **Sayac kalici kimliklerin uzerine aliniyor.** `_sayac` her acilista
+  /// sifirdan basliyordu; gecmiste `is_0` dururken yeni is de `is_0`
+  /// oluyordu. Kimlik ayni zamanda **bildirim kimligi** olacak (Asama 5),
+  /// yani carpisma iki indirmenin tek bildirimi ezmesi demek. Ayrica
+  /// "gecmisten sil" gibi kimlige bakan her islem yanlis satiri bulurdu.
+  ///
+  /// Hata firlatmiyor: depo zaten sessiz, burada da yutulacak bir sey yok.
+  Future<void> yukle() async {
+    final kalici = await depo?.yukle();
+    if (kalici == null || kalici.isEmpty) return;
+
+    _gecmis
+      ..clear()
+      ..addAll(kalici.take(kayitSiniri));
+
+    var enBuyuk = -1;
+    for (final is_ in _gecmis) {
+      final sira = _kimlikSirasi(is_.kimlik);
+      if (sira > enBuyuk) enBuyuk = sira;
+    }
+    if (enBuyuk >= _sayac) _sayac = enBuyuk + 1;
+
+    notifyListeners();
+  }
+
+  /// `is_12` → `12`. Tanimadigi bicimde `-1`.
+  static int _kimlikSirasi(String kimlik) {
+    if (!kimlik.startsWith('is_')) return -1;
+    return int.tryParse(kimlik.substring(3)) ?? -1;
+  }
+
+  /// Gecmisi diske yazar — **beklenmiyor**.
+  ///
+  /// Cagiran yerler (`_gecmiseTasi`, `gecmisiTemizle`) arayuz akisinda;
+  /// disk yazmasini beklemek listenin guncellenmesini geciktirirdi.
+  /// Yazma zaten hicbir hata firlatmiyor.
+  void _kaliciyaYaz() {
+    final d = depo;
+    if (d == null) return;
+    unawaited(d.kaydet(_gecmis));
+  }
 
   /// Kuyruga yeni is ekler ve isletmeyi tetikler.
   /// Eklenen isin kimligini doner.
@@ -111,9 +170,14 @@ class KuyrukYoneticisi extends ChangeNotifier {
     await motor.iptal(kimlik);
   }
 
+  /// Gecmis listesini bosaltir — **dosyalari silmez.**
+  ///
+  /// Kalici kayit da siliniyor; yalnizca bellegi bosaltmak, gecmisin bir
+  /// sonraki acilista geri gelmesi demek olurdu.
   void gecmisiTemizle() {
     _gecmis.clear();
     notifyListeners();
+    unawaited(depo?.temizle());
   }
 
   // ---------------------------------------------------------------- isletme
@@ -174,6 +238,9 @@ class KuyrukYoneticisi extends ChangeNotifier {
           oran: 1,
           dosyaYolu: sonuc.yol,
           kayitYeri: sonuc.kayitYeri,
+          // Dosya disari cikarilamadiysa SEBEBI de tasiniyor; kart bunu
+          // dokununca gosteriyor. Log okunamadigi icin (§4.5) tek kaynak bu.
+          kayitHatasi: sonuc.kayitHatasi,
         ),
       );
       _gecmiseTasi(is_.kimlik);
@@ -259,6 +326,13 @@ class KuyrukYoneticisi extends ChangeNotifier {
     final dizin = _kuyruk.indexWhere((i) => i.kimlik == kimlik);
     if (dizin == -1) return;
     _gecmis.insert(0, _kuyruk.removeAt(dizin));
+
+    // En eski kayitlar dusuyor (bkz. [kayitSiniri]).
+    while (_gecmis.length > kayitSiniri) {
+      _gecmis.removeLast();
+    }
+
     notifyListeners();
+    _kaliciyaYaz();
   }
 }

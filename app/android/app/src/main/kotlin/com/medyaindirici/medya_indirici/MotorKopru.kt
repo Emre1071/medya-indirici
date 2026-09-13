@@ -1,6 +1,7 @@
 package com.medyaindirici.medya_indirici
 
 import android.content.Context
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -65,6 +66,26 @@ class MotorKopru(private val baglam: Context) {
         const val MASAUSTU_TARAYICI =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+        /**
+         * Instagram sayilan alan adlari.
+         *
+         * `Baglanti.tanidikAlanlar` ile ayni liste. Eskiden burada duz
+         * `adres.contains("instagram")` vardi; `instagr.am` kisa adresini
+         * yakalamiyordu — yani Dart tarafinin kabul ettigi bir adres
+         * Kotlin tarafinda Instagram sayilmiyor ve tarayici basligi hic
+         * eklenmiyordu.
+         */
+        private val INSTAGRAM_ALANLARI = listOf("instagram.com", "instagr.am")
+
+        /**
+         * Aga baglanan her cagriya verilen ust sinir.
+         *
+         * Varsayilani yok: takilan bir istek dakikalarca asili kalabiliyor
+         * ve kullanici bunu "uygulama dondu" diye okuyor. Sinir dolunca
+         * yt-dlp anlamli bir hata veriyor, o da Turkce cumleye ceviriliyor.
+         */
+        private const val SOKET_ZAMAN_ASIMI = "30"
     }
 
     /** Indirme ve cozumleme isleri bu havuzda calisiyor. */
@@ -338,12 +359,68 @@ class MotorKopru(private val baglam: Context) {
         cevap.success(durduruldu)
     }
 
+    /**
+     * Cozumleme ve indirmenin ORTAK istek iskeleti.
+     *
+     * ## Nicin tek yerde
+     * 🔴 Eskiden `cozumle` `getInfo(adres)` cagiriyordu — duz `String`
+     * asiri yuklemesi, yani **hicbir secenek tasimayan** bir istek. Instagram
+     * tarayici basligi ise yalnizca `indir` icinde ekleniyordu. Sonuc:
+     * "Instagram tanimadigi istemciye vermiyor" onlemi akisin **yalniz
+     * ikinci yarisinda** calisiyordu; oysa kullanicinin "giris gerekiyor"
+     * gordugu yer cogu zaman onizleme, yani cozumleme adimi. Ayni linkin
+     * bazen inip bazen inmemesinin sebeplerinden biri buydu.
+     *
+     * Iki yolun ayrisabilmesi artik yapisal olarak imkansiz: ikisi de
+     * buradan basliyor. Yeni bir ortak secenek eklenecsekse tek yer burasi.
+     */
+    private fun istekKur(adres: String): YoutubeDLRequest {
+        val istek = YoutubeDLRequest(adres)
+
+        // Oynatma listesi linki paylasildiginda tek gonderi iniyor.
+        istek.addOption("--no-playlist")
+        istek.addOption("--socket-timeout", SOKET_ZAMAN_ASIMI)
+
+        // Gomulu Python kendi sertifika deposuyla geliyor ve bazi
+        // telefonlarda (ozellikle eski Android'lerde) CDN zincirini
+        // dogrulayamiyor. Dogrulama basarisiz oldugunda indirme tamamen
+        // duruyor; kullanici acisindan "bazen calisiyor" gibi gorunen
+        // durumlardan biri de bu. Trafik yine TLS uzerinden gidiyor.
+        istek.addOption("--no-check-certificates")
+
+        // Tarayici basligi YALNIZ Instagram'a veriliyor. Genel ayarlamak
+        // YouTube'u bozabilir: YouTube gelen basliga gore farkli oynatici
+        // yaniti donduruyor ve yt-dlp'nin kendi basligini ezmek yeni
+        // kirilmalar uretir.
+        if (instagramMi(adres)) {
+            istek.addOption("--user-agent", MASAUSTU_TARAYICI)
+        }
+        return istek
+    }
+
+    /**
+     * Adres Instagram'a mi ait?
+     *
+     * Alan adi **nokta sinirina** gore karsilastiriliyor, duz `contains`
+     * ile degil: `instagram.com.sahte.net` Instagram sayilmamali.
+     * `Baglanti.tanidikMi` Dart tarafinda ayni kurali uyguluyor.
+     */
+    private fun instagramMi(adres: String): Boolean {
+        val sunucu = try {
+            Uri.parse(adres).host?.lowercase()
+        } catch (h: Throwable) {
+            null
+        } ?: return false
+
+        return INSTAGRAM_ALANLARI.any { sunucu == it || sunucu.endsWith(".$it") }
+    }
+
     private fun cozumle(adres: String, cevap: MethodChannel.Result) {
         if (!hazirDegilseHataVer(cevap)) return
 
         havuz.execute {
             try {
-                val bilgi = YoutubeDL.getInstance().getInfo(adres)
+                val bilgi = YoutubeDL.getInstance().getInfo(istekKur(adres))
 
                 val sesler = ArrayList<Map<String, Any?>>()
                 val videolar = ArrayList<Map<String, Any?>>()
@@ -414,6 +491,18 @@ class MotorKopru(private val baglam: Context) {
      * Cozum: format kendi icinde ses tasimiyorsa `+bestaudio` ekleniyor.
      * Zaten sesli olan formatlara eklenmiyor — eklenirse dosyaya ikinci
      * bir ses izi girer.
+     *
+     * ## Her dalin YEDEGI var
+     * 🔑 Secilen format kimligi **ikinci cikarimda kaybolabiliyor.**
+     * Onizleme bir cozumleme yapiyor, kullanici saniyeler sonra indirmeye
+     * basiyor ve yt-dlp linki bastan cikariyor. Instagram her cikarimda
+     * ayni kimligi uretmiyor (ve CDN adresleri imzali/sureli). Kimlik
+     * yedeksiz gonderildiginde yt-dlp "Requested format is not available"
+     * deyip duruyor — ayni link, ayni kullanici, farkli sonuc. "Bazen
+     * iniyor bazen inmiyor"un dogrudan sebebi buydu.
+     *
+     * `/best` yedegi eklendiginde en kotu ihtimalle kullanicinin sectigi
+     * kaliteden farkli bir dosya iniyor; bu, hic inmemekten iyidir.
      */
     private fun videoFormatKurali(
         formatKimlik: String?,
@@ -425,13 +514,23 @@ class MotorKopru(private val baglam: Context) {
             "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
 
         // Secilen format zaten sesli (Instagram'da hep boyle).
-        sesIceriyor -> formatKimlik
+        sesIceriyor -> "$formatKimlik/best[ext=mp4]/best"
 
         // Sessiz goruntu: ses eklenmeli. Once mp4 ile uyumlu m4a deneniyor,
         // sonra herhangi bir ses, en sonda tek parca yedegi.
         else ->
             "$formatKimlik+bestaudio[ext=m4a]/$formatKimlik+bestaudio/best"
     }
+
+    /**
+     * Ses indirmede kullanilacak yt-dlp format kurali.
+     *
+     * Video tarafiyla ayni yedek gerekcesi ([videoFormatKurali]): secilen
+     * kimlik ikinci cikarimda kaybolabiliyor.
+     */
+    private fun sesFormatKurali(formatKimlik: String?): String =
+        if (formatKimlik == null) "bestaudio/best"
+        else "$formatKimlik/bestaudio/best"
 
     private fun indir(
         adres: String?,
@@ -473,9 +572,10 @@ class MotorKopru(private val baglam: Context) {
             var klasoruKoru = false
 
             try {
-                val istek = YoutubeDLRequest(adres)
+                // Cozumlemeyle ORTAK iskelet: Instagram basligi, zaman
+                // asimi, sertifika ayari hep ayni yerden geliyor (§istekKur).
+                val istek = istekKur(adres)
                 istek.addOption("-o", "${klasor.absolutePath}/%(title).100s.%(ext)s")
-                istek.addOption("--no-playlist")
                 istek.addOption("--no-mtime")
 
                 if (tur == "ses") {
@@ -487,7 +587,7 @@ class MotorKopru(private val baglam: Context) {
                     } else {
                         // Hazir ses akisi dogrudan iniyor — donusturme yok,
                         // saniyeler suruyor. Cogu durumda istenen bu.
-                        istek.addOption("-f", formatKimlik ?: "bestaudio/best")
+                        istek.addOption("-f", sesFormatKurali(formatKimlik))
                     }
                 } else {
                     istek.addOption("-f", videoFormatKurali(formatKimlik, sesIceriyor))
@@ -496,17 +596,6 @@ class MotorKopru(private val baglam: Context) {
                     // birlestiriyor. Tek parca gelen kaynaklarda (Instagram)
                     // bu adim zaten hic calismiyor.
                     istek.addOption("--merge-output-format", "mp4")
-                }
-
-                // Instagram bazi gonderileri tanimadigi istemcilere
-                // vermiyor ve "giris yapmayi gerektiriyor" diyor.
-                //
-                // Basligi YALNIZ Instagram'a veriyoruz. Genel olarak
-                // ayarlamak YouTube'u bozabilir: YouTube gelen basliga gore
-                // farkli oynatici yaniti donduruyor ve yt-dlp'nin kendi
-                // ayarladigi basligi ezmek yeni kirilmalar uretir.
-                if (adres.contains("instagram", ignoreCase = true)) {
-                    istek.addOption("--user-agent", MASAUSTU_TARAYICI)
                 }
 
                 // Ciktisi saklaniyor: indirme "bitti" gorunup dosya
@@ -544,7 +633,11 @@ class MotorKopru(private val baglam: Context) {
                         kaydedici.kaydet(yeniDosya, tur == "ses")
                     } catch (h: Throwable) {
                         Log.e(ETIKET, "Disari cikarma basarisiz", h)
-                        MedyaKaydedici.Sonuc(yeniDosya.absolutePath, null)
+                        MedyaKaydedici.Sonuc(
+                            yeniDosya.absolutePath,
+                            null,
+                            hataZinciri(h),
+                        )
                     }
 
                     // Disari cikarilamadiysa dosya yerinde birakiliyor.
@@ -555,6 +648,10 @@ class MotorKopru(private val baglam: Context) {
                             mapOf(
                                 "yol" to sonuc.yol,
                                 "kayitYeri" to sonuc.kayitYeri,
+                                // Cikarma neden olmadi — arayuz bunu
+                                // dokununca gosteriyor. Cihazdan log
+                                // alinamadigi icin tek tani kaynagi bu.
+                                "kayitHatasi" to sonuc.hataAyrinti,
                             )
                         )
                     }

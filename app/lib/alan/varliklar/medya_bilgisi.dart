@@ -1,3 +1,10 @@
+/// Diskten okunan bir alani metne cevirir; metin degilse `null`.
+///
+/// Duz `as String?` yeterli degil: JSON'da sayi duran bir alan `as String?`
+/// ile **istisna firlatir**. Gecmis dosyasi bozulabilecek bir sey oldugu
+/// icin her alan tek tek suzuluyor.
+String? metinOku(Object? deger) => deger is String ? deger : null;
+
 /// Bir linkin **cozumlenmis** hali: motor (yt-dlp) linke bakip ne oldugunu
 /// soyledikten sonra elimizde kalan bilgi.
 ///
@@ -48,6 +55,49 @@ class MedyaBilgisi {
 
   MedyaKalitesi? get onerilenVideo =>
       videoSecenekleri.isEmpty ? null : videoSecenekleri.first;
+
+  /// Gecmisin diske yazilabilmesi icin duz haritaya cevirir.
+  ///
+  /// ## Kalite listeleri BILEREK yazilmiyor
+  /// `sesSecenekleri` / `videoSecenekleri` icindeki format kimlikleri
+  /// **suresi dolan** seyler: Instagram her cozumlemede farkli kimlik
+  /// uretebiliyor ve CDN adresleri imzali. Onlari diske yazip bir hafta
+  /// sonra kullanmak, calismayacagi bilinen bir veriyi saklamak olurdu.
+  /// Gecmis satiri zaten yalniz "ne indirdim" sorusunu cevapliyor.
+  ///
+  /// Elle yazildi: `json_serializable` bir kod ureteci ve `build_runner`
+  /// zinciri getiriyor; burada alan sayisi alti.
+  Map<String, Object?> toJson() => {
+        'adres': adres,
+        'baslik': baslik,
+        'kapakAdresi': kapakAdresi,
+        'sureSaniye': sure?.inSeconds,
+        'yukleyen': yukleyen,
+        'kaynak': kaynak,
+      };
+
+  /// Bozuk veya eksik kayitta `null` doner — **firlatmaz**.
+  ///
+  /// Diskteki dosya her sekilde bozulabiliyor (yarim yazma, elle
+  /// duzenleme, eski surumden kalan alan). Tek bir bozuk satir yuzunden
+  /// uygulamanin acilmamasi kabul edilemez.
+  static MedyaBilgisi? fromJson(Object? ham) {
+    if (ham is! Map) return null;
+
+    final adres = metinOku(ham['adres']);
+    final baslik = metinOku(ham['baslik']);
+    if (adres == null || baslik == null) return null;
+
+    final saniye = ham['sureSaniye'];
+    return MedyaBilgisi(
+      adres: adres,
+      baslik: baslik,
+      kapakAdresi: metinOku(ham['kapakAdresi']),
+      sure: saniye is int && saniye > 0 ? Duration(seconds: saniye) : null,
+      yukleyen: metinOku(ham['yukleyen']),
+      kaynak: metinOku(ham['kaynak']) ?? 'diger',
+    );
+  }
 
   /// `0:47` / `1:03:20` bicimi. Sure yoksa bos metin.
   String get sureMetni {

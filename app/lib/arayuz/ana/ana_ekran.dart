@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../cekirdek/baglanti.dart';
 import '../../cekirdek/tema.dart';
 import '../../servisler/indirme_motoru.dart';
 import '../../servisler/kuyruk_yoneticisi.dart';
@@ -53,12 +54,37 @@ class _AnaEkraniState extends State<AnaEkran> {
     // Panodaki sey zaten bir bagalantiysa dogrudan onizlemeye geciyoruz.
     // Kullanici linki kopyalamis ve uygulamayi acmis — niyeti belli,
     // bir de "Çözümle" dedirtmek gereksiz bir adim olurdu.
-    if (_baglantiMi(metin)) _cozumle();
+    //
+    // Denetim `Baglanti` uzerinden: Instagram'dan kopyalanan sey cogu
+    // zaman "aciklama + link" blogu oluyor ve icinde link VAR.
+    if (Baglanti.ayikla(metin) != null) _cozumle();
   }
 
   void _cozumle() {
-    final adres = _girdi.text.trim();
-    if (adres.isEmpty) return;
+    // 🔑 Ham girdi motora DOGRUDAN gitmiyor.
+    //
+    // Bu yol uzun sure `Baglanti`'yi hic kullanmiyordu: ayiklama ve takip
+    // parametresi temizligi yalnizca paylas menusu yolunda (`AnaKabuk`)
+    // calisiyordu. Iki sonucu vardi:
+    //
+    //  - Instagram'in `igsh` paylasim jetonu adreste kaliyor ve istegi
+    //    "tanimadigim bir baglantidan geldi" konumuna dusurebiliyordu —
+    //    ayni linkin bazen inip bazen inmemesinin sebeplerinden biri.
+    //  - Pano "aciklama + link" blogu ise blogun TAMAMI adres olarak
+    //    gonderiliyor ve "Unsupported URL" ile donuyordu; kullanici da
+    //    uygulamanin Instagram'i desteklemedigini saniyordu.
+    //
+    // Artik iki giris kapisi da ayni suzgecten geciyor.
+    final adres = Baglanti.ayikla(_girdi.text);
+    if (adres == null) {
+      if (_girdi.text.trim().isEmpty) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Metinde bir bağlantı bulunamadı. Linki yapıştır.'),
+        ),
+      );
+      return;
+    }
 
     // Motor hazir degilken cozumlemeye kalkismak, kullaniciya teknik bir
     // hata gostermek olurdu. Yazdigi adres kutuda kaliyor: birkac saniye
@@ -75,13 +101,6 @@ class _AnaEkraniState extends State<AnaEkran> {
           ),
           backgroundColor: durum.kurulamadiMi ? Renkler.hata : null,
         ),
-      );
-      return;
-    }
-
-    if (!_baglantiMi(adres)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bu bir bağlantı değil. Linki yapıştır.')),
       );
       return;
     }
@@ -133,13 +152,6 @@ class _AnaEkraniState extends State<AnaEkran> {
       ),
     );
   }
-
-  /// Kaba bir kontrol — amac yanlis yapistirmayi yakalamak, adresi
-  /// dogrulamak degil. Gercek dogrulamayi motor yapiyor; burada fazla
-  /// katı davranmak, destekledigimiz ama kalibina uymayan adresleri
-  /// bosuna reddetmek olurdu.
-  bool _baglantiMi(String metin) =>
-      metin.startsWith('http://') || metin.startsWith('https://');
 
   @override
   Widget build(BuildContext context) {

@@ -64,6 +64,19 @@ class IndirmeIsi {
   /// bulamaz, bu yuzden ekranda ayirt ediliyor.
   final String? kayitYeri;
 
+  /// Dosya telefonun ortak klasorune **nicin** cikarilamadi.
+  ///
+  /// ## Nicin ayri bir alan
+  /// Eskiden bu bilgi yalnizca `Log.e`'ye gidiyordu ve cihaz `adb`'ye
+  /// baglanmadigi icin (USB hata ayiklama kapali) hic okunamiyordu.
+  /// Sonuc: "galeride gorunmuyor" diyen kullaniciya sorulacak tek soru
+  /// kalmiyordu. Motor kurulum hatasi ve indirme hatasi icin calisan
+  /// kalibin ayni si: ham metin saklanir, kendiliginden gosterilmez,
+  /// karta dokununca kopyalanir.
+  ///
+  /// `kayitYeri` doluyken bu alan `null` olur.
+  final String? kayitHatasi;
+
   /// Hata durumunda **kullaniciya gosterilecek** mesaj.
   /// Teknik yigin izi degil; ne yapabilecegini anlatan cumle.
   final String? hataMesaji;
@@ -86,6 +99,7 @@ class IndirmeIsi {
     this.hiz,
     this.dosyaYolu,
     this.kayitYeri,
+    this.kayitHatasi,
     this.hataMesaji,
     this.hataAyrinti,
   });
@@ -117,6 +131,7 @@ class IndirmeIsi {
     String? hiz,
     String? dosyaYolu,
     String? kayitYeri,
+    String? kayitHatasi,
     String? hataMesaji,
     String? hataAyrinti,
   }) {
@@ -131,8 +146,51 @@ class IndirmeIsi {
       hiz: hiz ?? this.hiz,
       dosyaYolu: dosyaYolu ?? this.dosyaYolu,
       kayitYeri: kayitYeri ?? this.kayitYeri,
+      kayitHatasi: kayitHatasi ?? this.kayitHatasi,
       hataMesaji: hataMesaji ?? this.hataMesaji,
       hataAyrinti: hataAyrinti ?? this.hataAyrinti,
+    );
+  }
+
+  // ------------------------------------------------------- kalici gecmis
+
+  /// Gecmis dosyasina yazilacak duz harita.
+  ///
+  /// `durum`, `oran`, `hiz` ve hata alanlari **yazilmiyor**: gecmise
+  /// yalnizca tamamlanmis isler giriyor (`KuyrukYoneticisi._gecmiseTasi`
+  /// yalnizca basarili yolda cagriliyor), yani hepsinin durumu `bitti`.
+  /// Anlik ilerleme degerlerini diske yazmak, yeniden acildiginda anlami
+  /// olmayan bir sayiyi geri getirmek olurdu.
+  ///
+  /// `kalite` de yazilmiyor — gerekcesi [MedyaBilgisi.toJson] icinde.
+  Map<String, Object?> toJson() => {
+        'kimlik': kimlik,
+        'adres': adres,
+        'tur': tur == IndirmeTuru.ses ? 'ses' : 'video',
+        'bilgi': bilgi?.toJson(),
+        'dosyaYolu': dosyaYolu,
+        'kayitYeri': kayitYeri,
+        'kayitHatasi': kayitHatasi,
+      };
+
+  /// Bozuk kayitta `null` doner — **firlatmaz** (bkz. [MedyaBilgisi.fromJson]).
+  static IndirmeIsi? fromJson(Object? ham) {
+    if (ham is! Map) return null;
+
+    final kimlik = metinOku(ham['kimlik']);
+    final adres = metinOku(ham['adres']);
+    if (kimlik == null || adres == null) return null;
+
+    return IndirmeIsi(
+      kimlik: kimlik,
+      adres: adres,
+      tur: metinOku(ham['tur']) == 'ses' ? IndirmeTuru.ses : IndirmeTuru.video,
+      durum: IsDurumu.bitti,
+      bilgi: MedyaBilgisi.fromJson(ham['bilgi']),
+      oran: 1,
+      dosyaYolu: metinOku(ham['dosyaYolu']),
+      kayitYeri: metinOku(ham['kayitYeri']),
+      kayitHatasi: metinOku(ham['kayitHatasi']),
     );
   }
 }

@@ -148,6 +148,16 @@ class MainActivity : FlutterActivity() {
             Log.e(ETIKET, "Paylasim koprusu kurulamadi", h)
         }
 
+        // Inen dosyayi acan/paylasan kopru. Patlarsa "Aç" dugmesi
+        // calismiyor demektir — indirmeyi engellemesi icin sebep yok.
+        try {
+            DosyaKoprusu(this).kanallariBagla(
+                flutterEngine.dartExecutor.binaryMessenger,
+            )
+        } catch (h: Throwable) {
+            Log.e(ETIKET, "Dosya koprusu kurulamadi", h)
+        }
+
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, kanalAdi)
             .setMethodCallHandler { cagri, cevap ->
                 when (cagri.method) {
@@ -210,7 +220,9 @@ class MainActivity : FlutterActivity() {
 
             startActivity(niyet)
             cevap.success(true)
-        } catch (h: Exception) {
+        } catch (h: Throwable) {
+            // §4.4 kurali: `Exception` degil `Throwable`. Bir `Error`
+            // yakalanmazsa surecin tamamini oldururdu.
             cevap.error("KURULUM_HATASI", h.message, null)
         }
     }

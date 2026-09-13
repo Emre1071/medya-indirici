@@ -126,10 +126,20 @@ class YtDlpMotoru implements IndirmeMotoru {
       // hata saymiyoruz (dosya duruyor) ama arayuz farki gostersin diye
       // `null` olarak tasiyoruz.
       final kayitYeri = ham?['kayitYeri'] as String?;
+
+      // Cikarma basarisizsa SEBEBI de geliyor. Kullaniciya kendiliginden
+      // gosterilmiyor — karta dokununca kopyalaniyor. Cihaz `adb`'ye
+      // baglanmadigi icin (USB hata ayiklama kapali) "galeride gorunmuyor"
+      // sikayetinin sebebini ogrenmenin baska yolu yok.
+      final kayitHatasi = ham?['kayitHatasi'] as String?;
+
       return IndirmeSonucu(
         yol: yol,
         kayitYeri: (kayitYeri != null && kayitYeri.isNotEmpty)
             ? kayitYeri
+            : null,
+        kayitHatasi: (kayitHatasi != null && kayitHatasi.isNotEmpty)
+            ? kayitHatasi
             : null,
       );
     } on PlatformException catch (h) {

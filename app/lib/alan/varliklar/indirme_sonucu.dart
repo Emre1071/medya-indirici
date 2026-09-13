@@ -26,7 +26,18 @@ class IndirmeSonucu {
   /// `null` ise dosya disari cikarilamadi, uygulamanin kendi klasorunde.
   final String? kayitYeri;
 
-  const IndirmeSonucu({required this.yol, this.kayitYeri});
+  /// Cikarma basarisizsa **sebebin ham metni** (istisna zinciri).
+  ///
+  /// Kullaniciya kendiliginden gosterilmiyor; karta dokununca kopyalaniyor.
+  /// Cihazdan log alinamadigi icin (USB hata ayiklama kapali) "galeride
+  /// gorunmuyor" sikayetinin sebebini ogrenmenin tek yolu bu.
+  final String? kayitHatasi;
+
+  const IndirmeSonucu({
+    required this.yol,
+    this.kayitYeri,
+    this.kayitHatasi,
+  });
 
   bool get disaAktarildi => kayitYeri != null;
 }

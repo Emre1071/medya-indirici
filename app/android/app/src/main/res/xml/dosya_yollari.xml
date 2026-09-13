@@ -2,15 +2,28 @@
 <!--
   FileProvider'in paylasmasina izin verilen klasorler.
 
-  Yalnizca uygulamanin KENDI onbellek klasoru aciliyor — indirilen guncelleme
-  APK'si oraya yaziliyor (Dart tarafinda getTemporaryDirectory()).
-  Baska hicbir yer paylasilmiyor: burasi genisletilirse uygulamanin ozel
-  verisi disariya acilabilir hale gelir.
+  Her giris ayri bir gerekceyle duruyor; burasi genisletilirse uygulamanin
+  ozel verisi disariya acilabilir hale gelir. Yeni satir eklemeden once
+  "bu klasorde baska ne var?" diye sorulmali.
 
-  DIKKAT: Asama 5'te indirilen videolar icin BURASI KULLANILMAYACAK.
-  Onlar MediaStore uzerinden telefonun Muzik/Filmler klasorune yazilacak;
-  o ayri bir mekanizma ve bu saglayiciyi genisletmeyi gerektirmiyor.
+  1) guncelleme  — indirilen guncelleme APK'si (Dart: getTemporaryDirectory).
+  2) muzik / filmler — YALNIZCA Android 9 ve oncesi icin.
+
+  Ikinci grup nicin gerekli: API 28 ve altinda `MedyaKaydedici.eskiKaydet`
+  ortak klasore DUZ DOSYA yaziyor, yani "Aç" dugmesinin elinde bir dosya
+  yolu oluyor. O yolu baska bir uygulamaya duz `file://` ile vermek
+  Android 7'den beri `FileUriExposedException` ile sonuclaniyor; tek yol
+  FileProvider.
+
+  API 29 ve ustunde bu girislerin hicbiri kullanilmiyor: orada dosya zaten
+  MediaStore'a yaziliyor ve elimizdeki sey bir `content://` adresi.
+  Kapsamli depolamada bu klasorlere duz yolla erisim de yok.
+
+  Paylasilan alan bilerek DAR: yalnizca uygulamanin kendi olusturdugu
+  `Medya İndirici` alt klasoru, kullanicinin butun muzik arsivi degil.
 -->
 <paths>
     <cache-path name="guncelleme" path="." />
+    <external-path name="muzik" path="Music/Medya İndirici/" />
+    <external-path name="filmler" path="Movies/Medya İndirici/" />
 </paths>

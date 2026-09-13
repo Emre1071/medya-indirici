@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../cekirdek/baglanti.dart';
 import '../../cekirdek/tema.dart';
+import '../../servisler/gecmis_deposu.dart';
 import '../../servisler/guncelleme_servisi.dart';
 import '../../servisler/indirme_motoru.dart';
 import '../../servisler/kuyruk_yoneticisi.dart';
@@ -37,7 +38,15 @@ class AnaKabuk extends StatefulWidget {
 }
 
 class _AnaKabukState extends State<AnaKabuk> {
-  late final KuyrukYoneticisi _kuyruk = KuyrukYoneticisi(widget.motor);
+  /// Kuyruk, gecmisi diske yazan depoyla birlikte kuruluyor.
+  ///
+  /// Depo secimi `gecmisDeposuSec()` icinde — motor seciminin (`main.dart`)
+  /// ayni kalibi. Telefonda JSON dosyasi, tarayicida hicbir sey.
+  late final KuyrukYoneticisi _kuyruk = KuyrukYoneticisi(
+    widget.motor,
+    depo: gecmisDeposuSec(),
+  );
+
   int _sekme = 0;
 
   /// Guncelleme kontrolunun sonucu. Kontrol bitene kadar `null`.
@@ -57,6 +66,12 @@ class _AnaKabukState extends State<AnaKabuk> {
   @override
   void initState() {
     super.initState();
+
+    // Kalici gecmis okunuyor. Beklenmiyor: liste birkac yuz satir da olsa
+    // dosya okuma birkac milisaniye suruyor ve bu sure boyunca kullanici
+    // link yapistirabilmeli. `yukle` hata firlatmiyor.
+    unawaited(_kuyruk.yukle());
+
     _guncellemeyeBak();
     _motoruBekle();
 

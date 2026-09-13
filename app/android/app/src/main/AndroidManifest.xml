@@ -109,5 +109,26 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+
+        <!-- INDIRILEN DOSYAYI ACABILEN UYGULAMALAR
+
+             DIKKAT: Android 11'den beri baska uygulamalarin listesi
+             varsayilan olarak GORUNMUYOR. Bu girisler olmadan
+             `resolveActivity` cagrisi telefonda oynatici kurulu olsa bile
+             HER ZAMAN null doner ve HATA DA VERMEZ — "Aç" dugmesi sessizce
+             hicbir sey yapmaz. Tam da bu projenin en sik dustugu tuzak
+             turu: derleme sorunsuz, sorun yalnizca telefonda goruluyor. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:mimeType="audio/*"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:mimeType="video/*"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SEND"/>
+            <data android:mimeType="*/*"/>
+        </intent>
     </queries>
 </manifest>

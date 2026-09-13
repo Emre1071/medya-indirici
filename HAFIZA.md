@@ -10,12 +10,13 @@
 > 🔒 **Bu dosya işle birlikte güncellenir** — her kritik değişiklik, hata
 > çözümü ve sürüm yükseltmesinden sonra. Kuralın tamamı §8 başında.
 >
-> Son güncelleme: 2026-09-06 — **OTA güncelleme cihazda doğrulandı**
-> (v0.1.1 telefona kendi kendine kuruldu). **v0.1.2 yayında** (ses ikonu +
-> zümrüt/teal renk, §6). Geriye kalan tek doğrulanmamış alan **indirme
-> sonrası akış**: sesli video §4.7, dosya galeride + geçmiş §4.8.
-> Öncesi: R8 §4.6, çökme §4.4-§4.5, paylaş menüsü §4.3, imza anahtarı §12,
-> derleme engeli §10.
+> Son güncelleme: 2026-09-14 — **üç yapısal düzeltme kodda** (cihazda
+> denenmedi): Instagram kararsızlığı §4.9, dosya açma + çıkarma tanısı
+> §4.10, **kalıcı geçmiş** §4.11. Testler 62. Sürüm **`0.1.3+4`**'e
+> yükseltildi (versionCode 2004); **derleme ve yayın henüz yapılmadı**,
+> telefondaki hâlâ v0.1.2.
+> Öncesi: OTA doğrulandı (v0.1.1), ses ikonu §6, R8 §4.6, çökme §4.4-§4.5,
+> paylaş menüsü §4.3, imza anahtarı §12, derleme engeli §10.
 
 ---
 
@@ -38,6 +39,11 @@
 | "Tamamlandı ama dosya bulunamadı" + geçmiş boş | Çıktıyı klasör farkıyla bulmak; iş başına klasör | §4.8 |
 | İndirildi ama galeride yok | `IS_PENDING` temizlenmemiş | §4.8 |
 | Güncelleme kurulmuyor | `versionCode` artmamış (`--split-per-abi` çarpanı) | §11 |
+| Aynı link bazen iniyor bazen inmiyor | UA yalnız indirmede vardı, çözümlemede yoktu; format kimliği yedeksizdi | §4.9 |
+| Elle yapıştırılan link "desteklenmiyor" diyor | `Baglanti.ayikla` yalnız paylaş menüsü yolunda çağrılıyordu | §4.9 |
+| "Aç" düğmesi hiçbir şey yapmıyor | Açma zinciri hiç yazılmamıştı; `<queries>` yoksa `resolveActivity` hep `null` | §4.10 |
+| Uygulama kapanınca geçmiş boş | Geçmiş yalnız bellekteydi | §4.11 |
+| Kotlin'de "Unclosed comment" / "top level declaration bekleniyor" | Yorumda `audio/` + yıldız — blok yorumlar iç içe geçiyor | §4.10 |
 
 **Tekrar eden ders:** bu projedeki hataların çoğu **derlemede görünmüyor,
 yalnızca telefonda ortaya çıkıyor.** Bu yüzden hem `⚠️`/`🔴` işaretleri hem
@@ -70,8 +76,8 @@ de uygulamanın kendi tanı raporu (§4.5) var.
 | `notlar/ELENENLER.md` | Değerlendirilip vazgeçilen 5 yol — aynı tartışmayı tekrar açma |
 | `app/` | Flutter projesi (Android + ekran önizlemesi için web) |
 | `app/lib/` | Dart kodu (§3) |
-| `app/android/.../kotlin/` | `MainActivity.kt` · `MotorKopru.kt` (motor) · `MedyaKaydedici.kt` (MediaStore) · `PaylasimKoprusu.kt` (paylaş menüsü) |
-| `app/test/` | `surum_test.dart` · `kuyruk_test.dart` (iptal) · `surum_kaynagi_test.dart` (GitHub) · `baglanti_test.dart` (link ayıklama) |
+| `app/android/.../kotlin/` | `MainActivity.kt` · `MotorKopru.kt` (motor) · `MedyaKaydedici.kt` (MediaStore) · `PaylasimKoprusu.kt` (paylaş menüsü) · `DosyaKoprusu.kt` (aç/paylaş, §4.10) |
+| `app/test/` | `surum_test.dart` · `kuyruk_test.dart` (iptal) · `surum_kaynagi_test.dart` (GitHub) · `baglanti_test.dart` (link ayıklama) · `gecmis_deposu_test.dart` (kalıcı geçmiş) |
 
 ✅ **Bu klasör artık bir git deposu** (`main` dalı, 2026-09-05).
 Uzak depo: **`Emre1071/medya-indirici`** — **public**.
@@ -106,6 +112,10 @@ lib/
 │   ├── guncelleme_servisi.dart "yeni sürüm var mı?" — asla hata fırlatmaz
 │   ├── motor_hazirlik.dart    motor açılana kadar bekleme (ortak)
 │   ├── paylasim_dinleyici.dart paylaş menüsünden gelen metin
+│   ├── dosya_acici.dart       inen dosyayı aç / paylaş (§4.10)
+│   ├── gecmis_deposu.dart     ARAYÜZ + hedefe göre seçim (§4.11)
+│   ├── gecmis_deposu_dosya.dart  JSON dosyası (dart:io)
+│   ├── gecmis_deposu_bos.dart    web — hiçbir şey saklamıyor
 │   └── apk_kurucu.dart        APK indir → Android kurulum ekranı
 ├── veri/uzak/surum_kaynagi.dart  http ile GitHub releases/latest
 └── arayuz/
@@ -636,6 +646,159 @@ satırları + klasör dökümü hata ayrıntısına konuyor. **Hatalı karta
 dokunmak** ayrıntıyı açıyor ve kopyalatıyor — motor kurulum hatasında
 aynı kalıp sorunu tek seferde çözdürmüştü.
 
+### 4.9 🔴 Instagram kararsızlığı — dört ayrı açık, tek belirti
+
+"Aynı link bazen iniyor bazen inmiyor." Dördü de gerçek, dördü de ayrı:
+
+**1. Çözümleme ile indirme aynı isteği göndermiyordu.** `cozumle()`
+`getInfo(adres)` çağırıyordu — düz `String` aşırı yüklemesi, yani **hiçbir
+seçenek taşımayan** istek. Instagram tarayıcı başlığı ise yalnız `indir()`
+içinde ekleniyordu. §4.7'deki önlem akışın **yalnız ikinci yarısında**
+çalışıyordu; oysa kullanıcının "giriş gerekiyor" gördüğü yer çoğunlukla
+önizleme, yani çözümleme.
+
+🔑 **Çözüm `istekKur(adres)`:** iki yol da aynı iskeletten başlıyor
+(UA, `--socket-timeout 30`, `--no-check-certificates`, `--no-playlist`).
+Ayrışma artık yapısal olarak imkânsız. Yeni ortak seçenek tek yere yazılır.
+Kütüphanede `getInfo(YoutubeDLRequest)` aşırı yüklemesi var (0.18.1) —
+kütüphane değişikliği gerekmedi.
+
+**2. Format kimliği yedeksiz gidiyordu.** Önizleme bir çözümleme yapıyor,
+kullanıcı saniyeler sonra indirmeye basıyor, yt-dlp linki **baştan
+çıkarıyor**. Instagram her çıkarımda aynı kimliği üretmiyor. Kimlik
+bulunamayınca "Requested format is not available" — aynı link, farklı
+sonuç. Artık her dalın yedeği var (`<id>/best`, ses için
+`<id>/bestaudio/best`). En kötü ihtimalle farklı kalite iner; bu, hiç
+inmemekten iyi.
+
+⚠️ `sesIceriyor == true` dalına **hâlâ `+bestaudio` eklenmiyor** — §4.7'deki
+"ikinci ses izi" gerekçesi geçerli. Değişen yalnız yedek zinciri.
+
+**3. Elle yapıştırma yolu `Baglanti`'yi hiç kullanmıyordu.** `ayikla` ve
+`temizle` yalnız `AnaKabuk` (paylaş menüsü) yolunda çağrılıyordu;
+`ana_ekran._cozumle()` ham metni doğrudan gönderiyordu. İki sonucu vardı:
+`igsh` paylaşım jetonu adreste kalıyordu ve pano "açıklama + link" bloğuysa
+**bloğun tamamı** adres olarak gidiyordu. Artık iki giriş kapısı da aynı
+süzgeçten geçiyor; `_baglantiMi` (düz `startsWith('http')`) kalktı.
+
+**4. Instagram tespiti Dart'ın listesiyle uyumsuzdu.** `adres.contains(
+"instagram")` `instagr.am` kısa adresini yakalamıyordu — Dart'ın kabul
+ettiği adres Kotlin'de Instagram sayılmıyor ve UA hiç eklenmiyordu. Artık
+host **nokta sınırına** göre karşılaştırılıyor (`instagram.com.sahte.net`
+Instagram değil), `Baglanti.tanidikMi` ile aynı kural.
+
+ℹ️ **Kimlik/çerez katmanı hâlâ yok.** Instagram anonim isteklere IP başına
+kota uyguluyor; ilk birkaç gönderi inip sonrakilerin "login required"
+alması bundan olabilir ve yukarıdaki dördü onu çözmez. Motor güncellemesi
+de çözmez — `_hataCevir`'deki yönlendirme bu yüzden tek çare gibi
+sunulmamalı.
+
+### 4.10 Dosyayı açmak — ve çıkarma hatasının görünür olması
+
+**"Aç" bir hata değildi, hiç yazılmamış bir zincirdi.** Düğme yalnızca
+"dosya şu klasörde" diyen bir uyarı gösteriyordu; kullanıcıyı müzik
+çalarına yollamak, üç dokunuşluk akışın sonuna dördüncü bir arama eklemek
+demekti. Zincir artık kurulu: `DosyaAcici` → `medyaindirici/dosya` →
+`DosyaKoprusu.kt`.
+
+| Android | `yol` | Ne yapılıyor |
+|---|---|---|
+| 29+ | `content://…` | olduğu gibi kullanılıyor, MIME `contentResolver.getType()`'tan |
+| 24–28 | düz dosya yolu | FileProvider'dan `content://` üretiliyor |
+
+- 🔴 **Düz `file://` seçenek değil** — Android 7'den beri
+  `FileUriExposedException`. `dosya_yollari.xml`'e `Music/Medya İndirici`
+  ve `Movies/Medya İndirici` eklendi; **yalnız o iki alt klasör**,
+  kullanıcının bütün müzik arşivi değil.
+- 🔴 **`<queries>` olmadan `resolveActivity` her zaman `null` döner** ve
+  hata da vermez — Android 11+ paket görünürlüğü. Manifeste `ACTION_VIEW`
+  (ses/video) ve `ACTION_SEND` sorguları eklendi.
+- Paylaşım `createChooser` ile: onsuz Android "her zaman bunu kullan"
+  tercihini hatırlıyor ve kullanıcı bir daha başka uygulamaya gönderemiyor.
+- Hatalar koda göre çevriliyor (`DOSYA_YOK`, `UYGULAMA_YOK`), metne göre
+  değil — metin Android sürümüne göre değişir.
+
+⚠️ **Kotlin blok yorumları İÇ İÇE geçiyor.** Yorumun içine `audio/` +
+yıldız yazmak yeni bir yorum açıyor; hata dosyanın **sonunda** "Unclosed
+comment" olarak çıkıyor, yani açıldığı yeri göstermiyor. Bu dosyada bir kez
+yaşandı. MIME jokeri yalnız kodda yazılı.
+
+#### Çıkarma hatası artık kayboluyor değil
+
+`MedyaKaydedici.kaydet` her `Throwable`'ı yutup yalnız `Log.e`'ye
+yazıyordu — cihaz `adb`'ye bağlanmadığı için (§4.5) o satır **hiç
+okunamıyordu**. "Galeride görünmüyor" diyen kullanıcıya sorulacak soru
+kalmıyordu. `Sonuc.hataAyrinti` eklendi ve `IndirmeSonucu` →
+`IndirmeIsi.kayitHatasi` → indirilenler ekranındaki uyarı düğmesi zinciriyle
+**kopyalanabilir** hale geldi. Rapor ad, MIME, hedef klasör, boş alan ve
+**tüm sebep zincirini** taşıyor (dıştaki mesaj çoğu zaman boş).
+
+`kayitAc` döngüsü de son istisnayı saklıyor: eskiden her deneme `Log.w`'ya
+gidiyor, döngü tükenince içeriği olmayan bir "kayıt açılamadı"
+fırlatılıyordu.
+
+#### 🔑 MIME tablosu Android'in kendi tablosuyla hizalandı
+
+MediaProvider, `DISPLAY_NAME` uzantısı ile `MIME_TYPE` uyuşmadığında kendi
+kararını dayatıyor: ya ada ikinci uzantı ekliyor ya inserti reddediyor.
+
+| Uzantı | Önceden | AOSP `mime.types` | Şimdi |
+|---|---|---|---|
+| `.opus` | `audio/opus` | `audio/ogg` | `audio/ogg` |
+| `.webm` (ses) | `audio/webm` | `video/webm` | ad `.weba`'ya çevriliyor |
+
+⚠️ Bu **en sık karşılaşılan durum, istisna değil**: `mp3Zorla` varsayılan
+kapalı olduğu için inen ses dosyası çoğu zaman tam da `.opus`/`.webm`.
+Ayrıca `DISPLAY_NAME` yt-dlp'nin başlıktan ürettiği ad; Instagram'da başlık
+= alt yazı, yani satır sonu ve kontrol karakteri taşıyabiliyor — `kayitAdi`
+onları temizliyor.
+
+ℹ️ **Galerinin klasörü taramaması ayrı bir durum.** MIUI galerisi `Movies/`
+altındaki keyfi klasörleri listelemeyebiliyor; dosya MediaStore'da doğru
+kayıtlı olsa bile. Yukarıdaki rapor olmadan bu, gerçek bir kod hatasından
+ayırt edilemiyordu — ayırt etmenin yolu artık var.
+
+### 4.11 Kalıcı geçmiş — sqflite değil, JSON dosyası
+
+Geçmiş yalnızca bellekteydi (`KuyrukYoneticisi._gecmis`), süreç ölünce
+gidiyordu. Kod tabanında tek bir `toJson` bile yoktu.
+
+⚠️ **`PLAN.md` §6'daki "sqflite" satırından bilinçli sapma** — riverpod
+sapmasıyla aynı gerekçe. Veri tek boyutlu: iş başına bir satır, sorgu yok,
+birleştirme yok, en fazla "yeniden eskiye" sıralama. SQL'in verdiği hiçbir
+şey kullanılmayacaktı. `path_provider` **zaten bağımlılık listesinde**, yani
+tek JSON dosyası **sıfır yeni paket**. sqflite ayrıca web'de çalışmıyor.
+
+- **Atomik yazma:** önce `.yariminda`, sonra asıl adın üzerine taşınıyor.
+  Doğrudan yazılsaydı, yazma sırasında öldürülen bir uygulamada geride
+  yarım JSON kalır ve **bütün geçmiş** okunamaz olurdu. `ApkKurucu`'nun
+  kalıbı.
+- **Hiçbir çağrı hata fırlatmıyor** (`GuncellemeServisi` çizgisi). Bozuk tek
+  satır `fromJson`'dan `null` dönüp eleniyor, bozuk dosya = boş geçmiş.
+- **Dosya sürümü var** (`surum: 1`): alan değişince eski dosya sessizce
+  yoksayılıyor.
+- 🔑 **Sayaç kalıcı kimliklerin üzerine alınıyor.** `_sayac` her açılışta
+  sıfırdan başlıyordu; geçmişte `is_0` dururken yeni iş de `is_0` oluyordu.
+  Kimlik aynı zamanda **bildirim kimliği** olacak (Aşama 5) — çarpışma iki
+  indirmenin tek bildirimi ezmesi demek.
+- **Kapasite 200 kayıt**, en eskisi düşüyor.
+- **Format kimlikleri ve kalite listeleri diske YAZILMIYOR** — süresi dolan
+  veriler (§4.9/2). Çalışmayacağı bilinen bir şeyi saklamanın anlamı yok.
+- `gecmisiTemizle()` artık diski de boşaltıyor; yalnız belleği boşaltmak
+  geçmişin bir sonraki açılışta geri gelmesi demekti.
+
+**Web kısıtı kalıbı belirledi:** `dart:io` web derlemesinde çalışma anında
+değil **derleme anında** patlıyor, yani `kIsWeb` ile kaçınılamıyor. Seçim
+**koşullu import** ile (`gecmis_deposu.dart`), motor seçiminin `if`'iyle
+değil.
+
+⚠️ **`apk_kurucu.dart` bu kuralı ÇİĞNİYOR** — `dart:io` import ediyor,
+`Platform.isAndroid` kullanıyor ve `ayarlar_ekrani.dart` onu koşulsuz
+oluşturuyor. Yani §3'teki "`Platform` kullanılmıyor" cümlesi bugün doğru
+değil ve `flutter run -d chrome` muhtemelen derlenmiyor. **Doğrulanmadı**;
+tek komut: `C:\flutter\bin\flutter build web`. Sonuca göre ya §3 düzeltilir
+ya `apk_kurucu` koşullu import'a alınır.
+
 ### `MotorKopru.kt` — neden böyle yazıldı
 
 - `getInfo`/`execute` **bloklayan** çağrılar → 2 iş parçacıklı havuz.
@@ -854,9 +1017,9 @@ sonra köşe pikselinin alfası okunarak doğrulandı (`app_icon` 255,
 | **2** Android köprüsü | ✅ **bitti** — telefonda çalışıyor, motor açılıyor (Redmi Note 9 Pro, Android 12) |
 | **3** Arayüz ↔ motor | ✅ çözümleme cihazda doğrulandı; indirme sonrası akış §4.8'de düzeltildi |
 | **4** Paylaş menüsü | ✅ **bitti ve cihazda doğrulandı** — Instagram/YouTube → Paylaş → önizleme açılıyor (§4.3) |
-| **5** MediaStore + bildirim + arka plan | 🔶 **MediaStore yazıldı** (§4.1, §4.8) — cihazda henüz doğrulanmadı; bildirim ve arka planda indirme yok |
-| **6** Kuyruk / geçmiş / ayarlar cilası | 🔶 kuyruk, geçmiş, **iptal** var; kalıcı kayıt (sqflite) yok, "Aç/Paylaş" gerçek dosya açmıyor |
-| **7** Kendini güncelleme | ✅ **bitti ve cihazda doğrulandı** — v0.1.1 OTA ile kuruldu; **v0.1.2 yayında** (§11, §12) |
+| **5** MediaStore + bildirim + arka plan | 🔶 MediaStore (§4.1, §4.8) + **"Aç/Paylaş" yazıldı** (§4.10) — cihazda doğrulanmadı; bildirim ve arka planda indirme yok |
+| **6** Kuyruk / geçmiş / ayarlar cilası | 🔶 kuyruk, geçmiş, **iptal**, **kalıcı geçmiş** (§4.11) var — cihazda doğrulanmadı |
+| **7** Kendini güncelleme | ✅ **bitti ve cihazda doğrulandı** — v0.1.1 OTA ile kuruldu; kodda **v0.1.3**, yayındaki **v0.1.2** (§11, §12) |
 | **8** Facebook/TikTok/kapalı hesap | ❌ (`kaynakBul` zaten tanıyor, gerisi yok) |
 
 ### Cihazda ne doğrulandı, ne doğrulanmadı
@@ -869,27 +1032,35 @@ Uzun süre hiçbir şey telefonda çalışmamıştı; artık ayrım net tutulmal
 | Motor (gömülü yt-dlp) açılıyor | ✅ (§4.6) |
 | Paylaş menüsü → link ayıklama → önizleme | ✅ |
 | Çözümleme (kapak, başlık, kaliteler) | ✅ |
-| **İndirme → dosya galeride** | ❓ §4.7 ve §4.8 düzeltmelerinden sonra **denenmedi** |
+| **İndirme → dosya galeride** | ❓ §4.7, §4.8, §4.10 düzeltmelerinden sonra **denenmedi** |
 | **Sesli video** | ❓ §4.7'den sonra denenmedi |
 | **İndirme geçmişi** | ❓ §4.8'den sonra denenmedi |
+| **Kalıcı geçmiş** (kapat-aç) | ❓ §4.11 — hiç denenmedi |
+| **Dosyayı açma / paylaşma** | ❓ §4.10 — hiç denenmedi |
+| **Instagram istikrarı** | ❓ §4.9 — hiç denenmedi |
 | **İptal** | ❓ hiç denenmedi |
 | **OTA güncelleme** (indir + kur) | ✅ **v0.1.1 telefona OTA ile kuruldu** (2026-09-06) — kontrol, indirme, izin ve kurulum adımlarının tamamı çalışıyor |
 
 ### Sıradaki iş
-**İndirme tarafını cihazda doğrulamak.** OTA çalıştığı için v0.1.1/v0.1.2
-telefonda; yani §4.7 (sesli video) ve §4.8 (dosya galeride + geçmiş)
-düzeltmeleri artık *denenebilir* durumda ama **hâlâ denenmedi**. Sırasıyla:
+**Yeni bir APK alıp indirme tarafını cihazda doğrulamak.** §4.7-§4.11'in
+hiçbiri telefonda denenmedi ve telefondaki v0.1.2 bunların hiçbirini
+içermiyor — yani önce derleme (§10: ASCII yol) + sürüm yükseltme (§11)
+gerekiyor. Sonra sırasıyla:
 
 1. YouTube videosu indir → **sesi var mı**
 2. Instagram Reels indir → dosya **Movies/Medya İndirici**'de mi, galeride
    görünüyor mu
-3. İndirilen öğe **geçmiş listesinde** mi
-4. Süren indirmeyi **durdur** → gerçekten kesiliyor mu
+3. **Aynı Reels'i ikinci kez** indir → yine iniyor mu (§4.9/2 formatı)
+4. **Elle link yapıştırarak** indir → paylaş menüsüyle aynı sonuç mu (§4.9/3)
+5. İndirilenler'de **karta dokun** → dosya açılıyor mu (§4.10)
+6. Uygulamayı **tamamen kapat, yeniden aç** → geçmiş duruyor mu (§4.11)
+7. Süren indirmeyi **durdur** → gerçekten kesiliyor mu
 
-Sorun çıkarsa: hatalı karta dokun → teknik ayrıntı → kopyala (§4.8).
+Çıkarma başarısız olursa: kartın sağındaki turuncu uyarı düğmesine dokun →
+ayrıntıyı kopyala (§4.10). İndirme başarısız olursa: hatalı karta dokun (§4.8).
 
-Kalan aşamalar: **5** (bildirim + arka planda indirme) ve **6**
-(kalıcı geçmiş, "Aç/Paylaş").
+Kalan aşamalar: **5** (bildirim + arka planda indirme) ve **8**
+(Facebook/TikTok/kapalı hesap).
 
 ### Açık kalan kararlar (Yahya'da)
 1. **Keystore yedeği** (§12) — tek kopya diskte duruyor, kaybı geri dönüşsüz
@@ -946,7 +1117,9 @@ düzelt ve durumu bildir.
 - Yeni paket eklemeden önce iki kez düşün: bu proje bağımlılıktan bilerek
   kaçınıyor (bkz. `ApkKurucu` başındaki not — 40 satırlık iş için paket yok).
   Mevcut tüm bağımlılıklar: `http`, `path_provider`, `cupertino_icons`
-  (+ dev: `flutter_lints` 6.0.0). Dart SDK `^3.12.2`.
+  (+ dev: `flutter_lints` 6.0.0, `image`, `flutter_launcher_icons`).
+  Dart SDK `^3.12.2`. Kalıcı geçmiş de bu kurala uyarak **paketsiz**
+  yazıldı (§4.11).
 - Yeni ekran = mevcut düzeni izle: `alan/varliklar/<ad>.dart` → `servisler/`
   → `arayuz/<ad>/<ad>_ekrani.dart`; ortak parçalar `arayuz/ortak/`.
 - **Kuyruk/motor davranışı değiştirilirse `test/kuyruk_test.dart` de
@@ -977,7 +1150,8 @@ düzelt ve durumu bildir.
 
 ```powershell
 C:\flutter\bin\flutter pub get
-C:\flutter\bin\flutter test        # 46 test (surum 7 + kuyruk 8 + surum_kaynagi 15 + baglanti 16)
+C:\flutter\bin\flutter test        # 62 test (surum 7 + kuyruk 8 + surum_kaynagi 15
+                                   #          + baglanti 16 + gecmis_deposu 16)
 C:\flutter\bin\dart analyze        # temiz olmalı — "No issues found!"
 C:\flutter\bin\flutter run -d chrome --web-port=8099   # SAHTE motor, ekran bakışı
 C:\flutter\bin\flutter run -d <cihaz>                  # telefonda GERÇEK motor
@@ -1043,13 +1217,17 @@ yazılır, derleme orada koşar. Bu bir çözüm değil, ölçüm yöntemi.
 | GitHub CLI (`gh` 2.100.0) + oturum (`Emre1071`) | ✅ |
 | Uzak depo — **github.com/Emre1071/medya-indirici** (public) | ✅ push edildi |
 | Kalıcı imza anahtarı | ✅ §12 |
-| **Yayındaki sürüm: `v0.1.2`** | ✅ APK + `mapping.txt` ekli |
+| **Yayındaki sürüm: `v0.1.3`** | 🔶 kodda hazır (`0.1.3+4`), derleme ve yayın **yapılmadı** |
 
-Release: <https://github.com/Emre1071/medya-indirici/releases/tag/v0.1.2>
+Release: <https://github.com/Emre1071/medya-indirici/releases/tag/v0.1.3>
 
 ✅ **OTA yolu çalışıyor** — v0.1.1 telefona bu yolla kuruldu (2026-09-06).
 Sürüm geçmişi: `v0.1.0` (bozuk) → `v0.1.1` (çökme + indirme düzeltmeleri)
-→ `v0.1.2` (ses ikonu/renk).
+→ `v0.1.2` (ses ikonu/renk) → `v0.1.3` (kalıcı geçmiş §4.11, galeri/MIME
+§4.10, Instagram istikrarı §4.9, dosya açma §4.10).
+
+⚠️ **v0.1.3 telefona kurulana kadar §4.9-§4.11'in hiçbiri denenmiş
+sayılmaz** — telefondaki v0.1.2 bunların hiçbirini içermiyor.
 
 ⚠️ **`v0.1.0` bozuk** — R8 düzeltmelerinden önce alınmıştı, açılır açılmaz
 çöküyor. Kimseye o link verilmemeli. (Silinmedi: tarihî kayıt, ve
@@ -1096,8 +1274,16 @@ gh release create v0.1.1 `
 
 ⚠️ **`versionCode` artmak ZORUNDA**, yoksa Android güncellemeyi kurmaz.
 `--split-per-abi` ona mimariye göre önek ekliyor: arm64 için
-`2 * 1000 + yapı numarası`, yani `0.1.0+1` → **2001**, `0.1.1+2` → **2002**.
-Tek APK'ya (universal) geçilirse versionCode `2` olur ve **2002'den küçük
+`2 * 1000 + yapı numarası`.
+
+| Sürüm | pubspec | arm64 versionCode |
+|---|---|---|
+| v0.1.0 | `0.1.0+1` | 2001 |
+| v0.1.1 | `0.1.1+2` | 2002 |
+| v0.1.2 | `0.1.2+3` | 2003 |
+| **v0.1.3** | **`0.1.3+4`** | **2004** |
+
+Tek APK'ya (universal) geçilirse versionCode `4` olur ve **2004'ten küçük
 kaldığı için kurulum reddedilir** — o gün bu hesap hatırlanmalı.
 
 🔑 **Release notu doğrudan kullanıcıya gösteriliyor** (Ayarlar ekranında,
