@@ -10,12 +10,14 @@
 > 🔒 **Bu dosya işle birlikte güncellenir** — her kritik değişiklik, hata
 > çözümü ve sürüm yükseltmesinden sonra. Kuralın tamamı §8 başında.
 >
-> Son güncelleme: 2026-09-14 — **v0.1.5 yayında** (commit `fef7c99`,
-> versionCode 2006). v0.1.4 cihazda denendi ve **iki şey çürüdü** (§4.12):
-> MIUI `Movies/` kökünü taramıyor → video artık **`DCIM/MedyaIndirici`**;
-> uygulama içinden açma tutmuyordu → **sıralı aday denemesi** (§4.10).
-> v0.1.3'te gelenler: §4.9 Instagram, §4.10 açma, §4.11 kalıcı geçmiş.
-> Testler 62.
+> Son güncelleme: 2026-09-14 — **v0.1.6 yayında** (versionCode 2007).
+> Cihaz testleri üç turda üç şey çürüttü, üçü de düzeltildi:
+> `Movies/` MIUI'de taranmıyor → video **`DCIM/MedyaIndirici`** (§4.12);
+> MediaStore adresi paylaşılamıyor (`SecurityException`) → **FileProvider
+> asıl yol** (§4.13); WhatsApp webm/mkv kabul etmiyor → **mp4 remux**
+> (§4.14). v0.1.3'te gelenler: §4.9 Instagram, §4.10 açma, §4.11 kalıcı
+> geçmiş. Testler 62.
+> 🔴 **v0.1.6 cihazda denenmedi** — §7 sonundaki listeye bak.
 > Öncesi: OTA doğrulandı (v0.1.1), ses ikonu §6, R8 §4.6, çökme §4.4-§4.5,
 > paylaş menüsü §4.3, imza anahtarı §12, derleme engeli §10.
 
@@ -46,6 +48,8 @@
 | Uygulama kapanınca geçmiş boş | Geçmiş yalnız bellekteydi | §4.11 |
 | Xiaomi/MIUI'de dosya galeride yok | MIUI `Movies/` kökünü taramıyor → video DCIM'e alındı | §4.12 |
 | Dosya yöneticisinden açılıyor ama uygulamadan açılmıyor | `external_primary` birim adı / çözülemeyen MIME / sağlayıcı erişimi | §4.10 |
+| `SecurityException — UID does not have permission` | MediaStore adresine izin yazılamıyor; sahibi biz değiliz | §4.13 |
+| Video WhatsApp'tan gönderilemiyor | Kap webm/mkv; `--merge-output-format` tek parçada çalışmıyor | §4.14 |
 | Kotlin'de "Unclosed comment" / "top level declaration bekleniyor" | Yorumda `audio/` + yıldız — blok yorumlar iç içe geçiyor | §4.10 |
 
 **Tekrar eden ders:** bu projedeki hataların çoğu **derlemede görünmüyor,
@@ -863,6 +867,60 @@ Varsayılan `Movies` bırakıldı çünkü DCIM semantik olarak "kamerayla
 ℹ️ Ses tarafı bu tartışmanın dışında: müzik çalarlar `MediaStore.Audio`'yu
 klasörden bağımsız okuyor, galeri sesle ilgilenmiyor.
 
+### 4.13 🔴 `SecurityException` — MediaStore adresi paylaşılamıyor
+
+v0.1.5 cihazda: *`SecurityException — UID does not have permission`*.
+
+🔑 **`FLAG_GRANT_READ_URI_PERMISSION` bize ait olmayan bir sağlayıcıda
+hiçbir şey yapmıyor.** İzni veren taraf sağlayıcının sahibi; MediaStore'un
+sahibi biz değiliz, dolayısıyla verecek bir iznimiz de yok. Karşı uygulama
+adresi ancak **kendi** depolama izniyle okuyabiliyor ve MIUI uygulama arka
+plana düştüğünde bunu düşürüyor — belirtinin "bazen" olmasının sebebi bu.
+
+**Çözüm: kendi FileProvider'ımız asıl yol.** Orada sorun yapısal olarak
+yok: sağlayıcının sahibi biziz, `grantUriPermission` gerçekten çalışıyor ve
+izin karşı uygulama işini bitirene kadar yaşıyor.
+
+Zincir: `content://media/...` → `DATA` sütunundan **disk yolu** → `File` →
+`FileProvider.getUriForFile(…, "<paket>.dosyalar", …)`.
+
+⚠️ **MediaStore adayı silinmedi, son çareye indirildi.** FileProvider adresi
+ancak disk yolu okunabildiğinde kurulabiliyor; `DATA` her kayıtta dolu
+olmayabiliyor ve SD karttaki bir dosya `dosya_yollari.xml` ağaçlarının
+dışında kalıyor. Tek yol bırakılsaydı o durumlarda "Aç" **kesin**
+başarısız olurdu. Normal akışta hiç kullanılmıyor.
+
+⚠️ `grantUriPermission` yalnız **kendi** yetkimiz için çağrılıyor; sahibi
+olmadığın sağlayıcıda `SecurityException` atıyor ve günlüğü kirletiyordu.
+
+### 4.14 🔴 WhatsApp'a video gönderilemiyor — üç ayrı şart
+
+**1. Kap mp4 olmalı.** 🔑 **`--merge-output-format mp4` TEK BAŞINA
+YETMİYOR** — v0.1.3'ten beri vardı ve sorun sürüyordu. O seçenek yalnızca
+**birleştirme adımını** ilgilendiriyor: ses ve görüntü ayrı indiğinde kap
+mp4 oluyor. Tek parça inen bir `.webm`/`.mkv`'de birleştirme hiç
+çalışmadığı için seçenek de hiçbir şey yapmıyor.
+**`--remux-video mp4`** kabı ffmpeg ile çeviriyor ve birleştirme olsun
+olmasın çalışıyor.
+⚠️ `--recode-video` **değil**: o yeniden kodluyor, telefonda dakikalarca
+ffmpeg demek. Remux akışları olduğu gibi taşıyor. (Aynı gerekçe
+`mp3Zorla`nın varsayılan kapalı olmasının da sebebi.)
+
+**2. Kodlama da yaygın olmalı.** Kap düzelse bile VP9/AV1 içeren bir mp4'ü
+WhatsApp reddedebiliyor. Format zincirinin başına `vcodec^=avc1` kondu —
+H.264'ü WhatsApp ve telefon donanımı her zaman açıyor. Bulunamazsa zincir
+eskisi gibi devam ediyor: kalite kaybetmektense inmeyen video olmasın.
+
+**3. `ClipData` şart.** `EXTRA_STREAM` içindeki adres bir *extra*; sistem
+izni niyetin `data`/`clipData` alanlarına bakarak taşıyor ve **extra'lar o
+taramaya girmiyor.** Bayrak tek başına konulduğunda paylaşılan uygulama
+adresi okuyamıyor. Aynı adres `clipData` olarak da veriliyor.
+
+⚠️ **Paylaşımda joker MIME kullanılamaz.** Açmada joker işe yarıyor
+(Android uygulama seçtiriyor); paylaşımda tam tersi — WhatsApp niyet
+filtrelerinde somut tür ilan ediyor ve joker gelen paylaşımda listede
+**hiç görünmüyor**. `paylasimIcinSomut` video için `video/mp4` veriyor.
+
 ### `MotorKopru.kt` — neden böyle yazıldı
 
 - `getInfo`/`execute` **bloklayan** çağrılar → 2 iş parçacıklı havuz.
@@ -1102,8 +1160,9 @@ Uzun süre hiçbir şey telefonda çalışmamıştı; artık ayrım net tutulmal
 | **Kalıcı geçmiş** (kapat-aç) | ❓ §4.11 — hiç denenmedi |
 | **Dosyayı açma / paylaşma** | ❓ §4.10 — hiç denenmedi |
 | **Instagram istikrarı** | ❓ §4.9 — hiç denenmedi |
-| **MIUI'de galeride görünme** | 🔴 v0.1.4'te **BAŞARISIZ** — dosya `Movies/MedyaIndirici`'de var, dosya yöneticisi açıyor, MIUI Galerisi görmüyor. v0.1.5'te DCIM'e alındı, yeniden denenecek |
-| **Uygulama içinden açma** | 🔴 v0.1.4'te **BAŞARISIZ** — dosya yöneticisinden açılıyor, karttan açılmıyor. v0.1.5'te sıralı aday + görünür hata |
+| **MIUI'de galeride görünme** | ❓ v0.1.4'te başarısızdı (`Movies/` taranmıyor); v0.1.5'te DCIM'e alındı, **denenmedi** |
+| **Uygulama içinden açma** | 🔴 v0.1.5'te **BAŞARISIZ** — `SecurityException`. v0.1.6'da FileProvider asıl yol oldu (§4.13) |
+| **WhatsApp'a video gönderme** | 🔴 v0.1.5'te **BAŞARISIZ**. v0.1.6'da mp4 remux + ClipData + somut MIME (§4.14) |
 | **İptal** | ❓ hiç denenmedi |
 | **OTA güncelleme** (indir + kur) | ✅ **v0.1.1 telefona OTA ile kuruldu** (2026-09-06) — kontrol, indirme, izin ve kurulum adımlarının tamamı çalışıyor |
 
@@ -1283,16 +1342,17 @@ yazılır, derleme orada koşar. Bu bir çözüm değil, ölçüm yöntemi.
 | GitHub CLI (`gh` 2.100.0) + oturum (`Emre1071`) | ✅ |
 | Uzak depo — **github.com/Emre1071/medya-indirici** (public) | ✅ push edildi |
 | Kalıcı imza anahtarı | ✅ §12 |
-| **Yayındaki sürüm: `v0.1.5`** | ✅ APK + `mapping.txt` ekli |
+| **Yayındaki sürüm: `v0.1.6`** | ✅ APK + `mapping.txt` ekli |
 
-Release: <https://github.com/Emre1071/medya-indirici/releases/tag/v0.1.5>
+Release: <https://github.com/Emre1071/medya-indirici/releases/tag/v0.1.6>
 
 ✅ **OTA yolu çalışıyor** — v0.1.1 telefona bu yolla kuruldu (2026-09-06).
 Sürüm geçmişi: `v0.1.0` (bozuk) → `v0.1.1` (çökme + indirme düzeltmeleri)
 → `v0.1.2` (ses ikonu/renk) → `v0.1.3` (kalıcı geçmiş §4.11, galeri/MIME
 §4.10, Instagram istikrarı §4.9, dosya açma §4.10)
 → `v0.1.4` (MIUI denemesi — §4.12, **yetmedi**)
-→ `v0.1.5` (video DCIM'e, sıralı açma denemesi).
+→ `v0.1.5` (video DCIM'e, sıralı açma denemesi)
+→ `v0.1.6` (FileProvider'a geçiş §4.13, WhatsApp mp4 §4.14).
 
 ⚠️ **v0.1.4 telefona kurulana kadar §4.9-§4.12'nin hiçbiri denenmiş
 sayılmaz** — telefondaki v0.1.2 bunların hiçbirini içermiyor.
@@ -1364,9 +1424,10 @@ gh release create v0.1.1 `
 | v0.1.2 | `0.1.2+3` | 2003 |
 | v0.1.3 | `0.1.3+4` | 2004 |
 | v0.1.4 | `0.1.4+5` | 2005 |
-| **v0.1.5** | **`0.1.5+6`** | **2006** |
+| v0.1.5 | `0.1.5+6` | 2006 |
+| **v0.1.6** | **`0.1.6+7`** | **2007** |
 
-Tek APK'ya (universal) geçilirse versionCode `6` olur ve **2006'dan küçük
+Tek APK'ya (universal) geçilirse versionCode `7` olur ve **2007'den küçük
 kaldığı için kurulum reddedilir** — o gün bu hesap hatırlanmalı.
 
 🔑 **Release notu doğrudan kullanıcıya gösteriliyor** (Ayarlar ekranında,

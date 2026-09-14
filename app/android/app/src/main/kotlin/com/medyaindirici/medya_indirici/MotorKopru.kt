@@ -510,8 +510,16 @@ class MotorKopru(private val baglam: Context) {
     ): String = when {
         // Kullanici kalite secmedi: en iyi goruntu + en iyi ses, ikisi de
         // bulunamazsa tek parca gelen en iyi dosya.
+        //
+        // 🔑 `vcodec^=avc1` EN BASA kondu. WhatsApp ve telefonun donanim
+        // kod cozucusu H.264'u her zaman aciyor; VP9/AV1 kabini mp4'e
+        // remux edilse bile bazi uygulamalarda acilmiyor. Kabini
+        // duzeltmek (`--remux-video`) yetmez, icindeki kodlama da
+        // yaygin olani olmali. Yedek zinciri bulunamadiginda eskisi gibi
+        // devam ediyor — kalite kaybetmektense inmeyen video olmasin.
         formatKimlik == null ->
-            "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+            "bestvideo[vcodec^=avc1][ext=mp4]+bestaudio[ext=m4a]/" +
+                "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
 
         // Secilen format zaten sesli (Instagram'da hep boyle).
         sesIceriyor -> "$formatKimlik/best[ext=mp4]/best"
@@ -596,6 +604,25 @@ class MotorKopru(private val baglam: Context) {
                     // birlestiriyor. Tek parca gelen kaynaklarda (Instagram)
                     // bu adim zaten hic calismiyor.
                     istek.addOption("--merge-output-format", "mp4")
+
+                    // 🔑 `--merge-output-format` TEK BASINA YETMIYOR.
+                    //
+                    // O secenek yalnizca BIRLESTIRME adimini ilgilendiriyor:
+                    // ses ve goruntu ayri indiginde kabin mp4 oluyor. Tek
+                    // parca inen bir `.webm`/`.mkv` dosyasinda birlestirme
+                    // hic calismadigi icin secenek de hicbir sey yapmiyor ve
+                    // dosya webm olarak kaliyor. WhatsApp bu kabinlari
+                    // reddediyor — "video gonderilemiyor"un sebebi buydu.
+                    //
+                    // `--remux-video` kabini ffmpeg ile mp4'e ceviriyor ve
+                    // birlestirme olsun olmasin calisiyor.
+                    //
+                    // ⚠️ `--recode-video` DEGIL: o yeniden kodluyor, yani
+                    // telefonda dakikalarca ffmpeg calistirmak demek.
+                    // Remux akislari oldugu gibi tasiyor, saniyeler suruyor.
+                    // Ayni gerekce `mp3Zorla`nin varsayilan kapali
+                    // olmasinin da sebebi.
+                    istek.addOption("--remux-video", "mp4")
                 }
 
                 // Ciktisi saklaniyor: indirme "bitti" gorunup dosya
