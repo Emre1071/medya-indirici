@@ -136,6 +136,31 @@ class IsKarti extends StatelessWidget {
                     ),
                   ),
                 ),
+                // Dosya disari ciktiysa kart dokunulabilir ve dokunmak onu
+                // aciyor (`IndirilenlerEkrani`). Gostergesiz birakmak, asil
+                // eylemi kesfedilmez kilardi: kullanici kucuk ikona nisan
+                // almak zorunda kalirdi.
+                //
+                // 🔑 Bu, galeri indeksinden BAGIMSIZ: dosyayi `content://`
+                // adresiyle MediaStore sunuyor, oynatici onu galeride
+                // gormemis olsa bile aciliyor. Yani MIUI galerisi kaydi
+                // henuz taramamis olsa da bu satir yalan soylemiyor.
+                if (is_.kayitYeri != null) ...[
+                  const SizedBox(width: 6),
+                  const Icon(
+                    Icons.touch_app_outlined,
+                    size: 12,
+                    color: Renkler.metinSolgun,
+                  ),
+                  const SizedBox(width: 3),
+                  const Text(
+                    'aç',
+                    style: TextStyle(
+                      fontSize: Olculer.etiket,
+                      color: Renkler.metinSolgun,
+                    ),
+                  ),
+                ],
               ],
             ),
           ],

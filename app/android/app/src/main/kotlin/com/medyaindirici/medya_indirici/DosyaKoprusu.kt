@@ -3,6 +3,7 @@ package com.medyaindirici.medya_indirici
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.util.Log
 import android.webkit.MimeTypeMap
@@ -92,9 +93,12 @@ class DosyaKoprusu(private val etkinlik: Activity) {
             }
 
             val mime = mimeBul(adres, yol)
-            val niyet = if (paylas) paylasimNiyeti(adres, mime) else acmaNiyeti(adres, mime)
 
-            etkinlik.startActivity(niyet)
+            if (paylas) {
+                baslat(paylasimNiyeti(adres, mime), adres)
+            } else {
+                acmayiDene(adres, mime)
+            }
             cevap.success(true)
         } catch (h: ActivityNotFoundException) {
             // Telefonda bu turu acabilecek uygulama yok. Ham istisna
@@ -105,6 +109,62 @@ class DosyaKoprusu(private val etkinlik: Activity) {
             Log.e(ETIKET, "Dosya acilamadi: $yol", h)
             cevap.error("ACILAMADI", h.message, null)
         }
+    }
+
+    /**
+     * Dosyayi acar; dogrudan yol tutmazsa seciciye duser.
+     *
+     * ## Nicin iki asamali
+     * 🔑 **`content://` adresi galeri indeksinden bagimsiz calisir** —
+     * dosyayi MediaStore sunuyor, oynatici onu galeride gormemis olsa bile
+     * aciyor. Yani "galeride gorunmuyor" ile "acilmiyor" ayri sorunlar ve
+     * ilkinin cozumunu beklemeye gerek yok.
+     *
+     * Ama dogrudan `ACTION_VIEW` tek bir varsayilan uygulamaya gidiyor ve
+     * o uygulama bozuksa (MIUI'de varsayilan oynatici bazen tanimadigi
+     * saglayicidan okumayi reddediyor) is orada bitiyordu. Ikinci asama
+     * seciciyi aciyor: kullanici calisan bir uygulamayi kendi seciyor.
+     */
+    private fun acmayiDene(adres: Uri, mime: String) {
+        val niyet = acmaNiyeti(adres, mime)
+
+        try {
+            baslat(niyet, adres)
+            return
+        } catch (h: ActivityNotFoundException) {
+            Log.w(ETIKET, "Dogrudan acma tutmadi, secici denenecek", h)
+        }
+
+        // Secici, MIME'i tam eslesmeyen uygulamalari da listeliyor.
+        baslat(Intent.createChooser(niyet, "Aç"), adres)
+    }
+
+    /**
+     * Niyeti baslatir ve okuma iznini **acikca** verir.
+     *
+     * `FLAG_GRANT_READ_URI_PERMISSION` cogu cihazda yetiyor. Bazi uretici
+     * arayuzlerinde (MIUI dahil) karsi uygulama adresi yine okuyamiyor;
+     * `grantUriPermission` izni paket adina birebir yaziyor. Cozumlenen
+     * uygulama yoksa dongu bos gecip `startActivity`'nin kendi istisnasini
+     * cagirana birakiyor.
+     */
+    private fun baslat(niyet: Intent, adres: Uri) {
+        try {
+            etkinlik.packageManager
+                .queryIntentActivities(niyet, PackageManager.MATCH_DEFAULT_ONLY)
+                .forEach { cozum ->
+                    etkinlik.grantUriPermission(
+                        cozum.activityInfo.packageName,
+                        adres,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                    )
+                }
+        } catch (h: Throwable) {
+            // Izin yazilamadiysa bayrak yine duruyor; denemeye devam.
+            Log.w(ETIKET, "Uri izni acikca verilemedi", h)
+        }
+
+        etkinlik.startActivity(niyet)
     }
 
     /**

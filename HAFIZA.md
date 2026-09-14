@@ -10,11 +10,12 @@
 > 🔒 **Bu dosya işle birlikte güncellenir** — her kritik değişiklik, hata
 > çözümü ve sürüm yükseltmesinden sonra. Kuralın tamamı §8 başında.
 >
-> Son güncelleme: 2026-09-14 — **v0.1.3 yayında** (commit `94443f6`,
-> versionCode 2004, arm64 APK 59,5 MB). İçeriği: Instagram kararsızlığı
-> §4.9, dosya açma + çıkarma tanısı §4.10, **kalıcı geçmiş** §4.11.
-> Testler 62. 🔴 **Hiçbiri cihazda denenmedi** — telefondaki hâlâ v0.1.2,
-> önce OTA ile v0.1.3 kurulmalı (§7 sonundaki 7 madde).
+> Son güncelleme: 2026-09-14 — **v0.1.4 yayında** (versionCode 2005):
+> **MIUI galeri uyumluluğu** §4.12 — zorunlu tarama, ASCII klasör adı,
+> oynatıcı seçicisi. v0.1.3'te gelenler: Instagram kararsızlığı §4.9,
+> dosya açma + çıkarma tanısı §4.10, **kalıcı geçmiş** §4.11. Testler 62.
+> 🔴 **Hiçbiri cihazda denenmedi** — telefondaki hâlâ v0.1.2, önce OTA ile
+> v0.1.4 kurulmalı (§7 sonundaki maddeler).
 > Öncesi: OTA doğrulandı (v0.1.1), ses ikonu §6, R8 §4.6, çökme §4.4-§4.5,
 > paylaş menüsü §4.3, imza anahtarı §12, derleme engeli §10.
 
@@ -43,6 +44,7 @@
 | Elle yapıştırılan link "desteklenmiyor" diyor | `Baglanti.ayikla` yalnız paylaş menüsü yolunda çağrılıyordu | §4.9 |
 | "Aç" düğmesi hiçbir şey yapmıyor | Açma zinciri hiç yazılmamıştı; `<queries>` yoksa `resolveActivity` hep `null` | §4.10 |
 | Uygulama kapanınca geçmiş boş | Geçmiş yalnız bellekteydi | §4.11 |
+| Xiaomi/MIUI'de dosya bazen galeride yok | MIUI kendi indeksini tembel günceller; MediaStore'u doğrudan okumuyor | §4.12 |
 | Kotlin'de "Unclosed comment" / "top level declaration bekleniyor" | Yorumda `audio/` + yıldız — blok yorumlar iç içe geçiyor | §4.10 |
 
 **Tekrar eden ders:** bu projedeki hataların çoğu **derlemede görünmüyor,
@@ -622,10 +624,12 @@ bitince temizliyor. **Temizlenmezse dosya galeride görünmez** — kayıt
 arayüz "telefonun klasörlerine çıkarılamadı" diyor. Sessizce geçmek,
 "indirildi ama hiçbir yerde açılmıyor" tuzağını üretirdi.
 
-ℹ️ **`MediaScannerConnection.scanFile` API 29+ yolunda GEREKMİYOR** —
-kayıt zaten MediaStore'a yazılıyor, `IS_PENDING` temizlendiği anda
-görünür oluyor. Taramak ikinci bir kayıt riski taşır. API 28 ve altında
-düz dosya yazıldığı için tarama **şart** ve `eskiKaydet` onu yapıyor.
+🔴 **`MediaScannerConnection.scanFile` API 29+ yolunda DA çağrılıyor.**
+Burada uzun süre "gerekmiyor" yazıyordu ve gerekçe teoride doğruydu: kaydı
+MediaStore'un kendisine yazıyoruz, `IS_PENDING` temizlendiği anda dosya
+AOSP'de görünür oluyor. **Cihazda böyle çıkmadı** — ayrıntı §4.12.
+API 28 ve altında zaten şarttı (düz dosya yazılıyor), `eskiKaydet` onu
+yapmaya devam ediyor.
 
 #### Geçmiş kaydı izole edildi
 
@@ -798,6 +802,65 @@ oluşturuyor. Yani §3'teki "`Platform` kullanılmıyor" cümlesi bugün doğru
 değil ve `flutter run -d chrome` muhtemelen derlenmiyor. **Doğrulanmadı**;
 tek komut: `C:\flutter\bin\flutter build web`. Sonuca göre ya §3 düzeltilir
 ya `apk_kurucu` koşullu import'a alınır.
+
+### 4.12 🔴 MIUI — "bazen galeride var, bazen yok"
+
+Standart cihazlarda sorun yok; **Xiaomi/MIUI'de (Redmi Note 9 Pro,
+Android 12)** dosya iniyor, MediaStore'a doğru kaydediliyor, ama galeride
+bazen görünüyor bazen görünmüyor.
+
+🔑 **MIUI galerisi MediaStore'u doğrudan okumuyor.** `com.miui.gallery`
+kendi indeksini tutuyor ve onu **tembel** güncelliyor. AOSP'de gereksiz
+olan adım — tarayıcıyı açıkça tetiklemek — burada belirleyici oluyor.
+Bu, §4.8'deki "API 29+'ta tarama gerekmiyor" kararını çürüttü; o satır
+düzeltildi.
+
+**Üç önlem, üçü de ayrı bir değişkeni kapatıyor:**
+
+1. **Zorunlu tarama** (`taramayiZorla`) — `IS_PENDING = 0` yapıldıktan
+   hemen sonra `MediaScannerConnection.scanFile` + `notifyChange`.
+   İkisi birden: MIUI hem tarayıcıyı hem içerik gözlemcilerini dinliyor,
+   hangisinin tuttuğu cihaza göre değişiyor.
+2. **ASCII klasör adı** — `Medya İndirici` → **`MedyaIndirici`**. Ad dosya
+   sisteminde birebir oluşuyor; SD kart FAT/exFAT olabiliyor ve üretici
+   tarayıcılarının non-ASCII yol işlemesi tutarsız. `İ` (U+0130) gerçek
+   bir değişkendi, kaldırıldı.
+3. **Açma zinciri taramadan bağımsız** (§4.10) — `content://` adresini
+   MediaStore sunuyor; oynatıcı dosyayı galeride görmemiş olsa bile açıyor.
+   Yani "galeride görünmüyor" ile "açılmıyor" ayrı sorunlar.
+
+⚠️ **İkinci kayıt riski yol TAHMİN edilirse gerçek olur.** Eski gerekçe
+"taramak ikinci kayıt üretebilir" diyordu; tarayıcı dosya **yoluna göre**
+eşleşiyor, var olan satırı bulup güncelliyor. Bu yüzden yol
+`RELATIVE_PATH + DISPLAY_NAME` ile kurulmuyor — MediaProvider adı
+değiştirmiş olabiliyor (uzantı düzeltmesi, ad çakışmasında sayı ekleme) ve
+bir harfi tutmayan yol, işte o zaman ikinci kayıt açtırırdı. Yol, az önce
+yazdığımız satırın **`DATA` sütunundan** okunuyor (API 29'da kullanımdan
+kaldırıldı ama **okunabilir** kalmaya devam ediyor; yazmak yasak).
+
+⚠️ **Klasör adı değişikliği eski indirmeleri TAŞIMIYOR.** v0.1.3 ve
+öncesinde inenler `Medya İndirici`'de kalıyor. Toplu MediaStore
+güncellemesi yapılmadı: çalışan kayıtları bozma riski "klasör ikiye
+bölündü"nün önünde. Geçmişteki satırlar `content://` adresi taşıdığı için
+**açılmaya devam ediyor**; `dosya_yollari.xml` de eski Türkçe yolları
+API ≤ 28 için bilerek tutuyor.
+
+#### Hâlâ görünmezse: sıradaki tek satır
+
+`MedyaKaydedici.VIDEO_KLASORU` sabiti bu yüzden var.
+**MIUI galerisi `Movies/` altındaki uygulama klasörlerini tasarım gereği
+listelemeyebiliyor** — bu durumda sorun `İ` harfi değil, taranan kök
+kümesi ve yukarıdaki üç önlem de yetmez. Denenecek şey sabiti
+`Environment.DIRECTORY_DCIM` yapmak: MIUI galerisi DCIM'i her zaman
+tarıyor.
+
+Varsayılan `Movies` bırakıldı çünkü DCIM semantik olarak "kamerayla
+çekilen" demek; indirilen video oraya konunca kullanıcının kendi
+çekimlerinin arasına karışıyor. Önce daha doğru olan deneniyor — ama
+**tek satırlık geri dönüş** kasıtlı.
+
+ℹ️ Ses tarafı bu tartışmanın dışında: müzik çalarlar `MediaStore.Audio`'yu
+klasörden bağımsız okuyor, galeri sesle ilgilenmiyor.
 
 ### `MotorKopru.kt` — neden böyle yazıldı
 
@@ -1017,9 +1080,9 @@ sonra köşe pikselinin alfası okunarak doğrulandı (`app_icon` 255,
 | **2** Android köprüsü | ✅ **bitti** — telefonda çalışıyor, motor açılıyor (Redmi Note 9 Pro, Android 12) |
 | **3** Arayüz ↔ motor | ✅ çözümleme cihazda doğrulandı; indirme sonrası akış §4.8'de düzeltildi |
 | **4** Paylaş menüsü | ✅ **bitti ve cihazda doğrulandı** — Instagram/YouTube → Paylaş → önizleme açılıyor (§4.3) |
-| **5** MediaStore + bildirim + arka plan | 🔶 MediaStore (§4.1, §4.8) + **"Aç/Paylaş" yazıldı** (§4.10) — cihazda doğrulanmadı; bildirim ve arka planda indirme yok |
+| **5** MediaStore + bildirim + arka plan | 🔶 MediaStore (§4.1, §4.8) + **"Aç/Paylaş"** (§4.10) + **MIUI uyumluluğu** (§4.12) — cihazda doğrulanmadı; bildirim ve arka planda indirme yok |
 | **6** Kuyruk / geçmiş / ayarlar cilası | 🔶 kuyruk, geçmiş, **iptal**, **kalıcı geçmiş** (§4.11) var — cihazda doğrulanmadı |
-| **7** Kendini güncelleme | ✅ **bitti ve cihazda doğrulandı** — v0.1.1 OTA ile kuruldu; kodda **v0.1.3**, yayındaki **v0.1.2** (§11, §12) |
+| **7** Kendini güncelleme | ✅ **bitti ve cihazda doğrulandı** — v0.1.1 OTA ile kuruldu; yayındaki **v0.1.4**, telefondaki **v0.1.2** (§11, §12) |
 | **8** Facebook/TikTok/kapalı hesap | ❌ (`kaynakBul` zaten tanıyor, gerisi yok) |
 
 ### Cihazda ne doğrulandı, ne doğrulanmadı
@@ -1038,6 +1101,7 @@ Uzun süre hiçbir şey telefonda çalışmamıştı; artık ayrım net tutulmal
 | **Kalıcı geçmiş** (kapat-aç) | ❓ §4.11 — hiç denenmedi |
 | **Dosyayı açma / paylaşma** | ❓ §4.10 — hiç denenmedi |
 | **Instagram istikrarı** | ❓ §4.9 — hiç denenmedi |
+| **MIUI'de galeride görünme** | ❓ §4.12 — hiç denenmedi; **asıl sınanacak şey bu** |
 | **İptal** | ❓ hiç denenmedi |
 | **OTA güncelleme** (indir + kur) | ✅ **v0.1.1 telefona OTA ile kuruldu** (2026-09-06) — kontrol, indirme, izin ve kurulum adımlarının tamamı çalışıyor |
 
@@ -1217,20 +1281,21 @@ yazılır, derleme orada koşar. Bu bir çözüm değil, ölçüm yöntemi.
 | GitHub CLI (`gh` 2.100.0) + oturum (`Emre1071`) | ✅ |
 | Uzak depo — **github.com/Emre1071/medya-indirici** (public) | ✅ push edildi |
 | Kalıcı imza anahtarı | ✅ §12 |
-| **Yayındaki sürüm: `v0.1.3`** | ✅ APK + `mapping.txt` ekli, commit `94443f6` |
+| **Yayındaki sürüm: `v0.1.4`** | ✅ APK + `mapping.txt` ekli |
 
-Release: <https://github.com/Emre1071/medya-indirici/releases/tag/v0.1.3>
+Release: <https://github.com/Emre1071/medya-indirici/releases/tag/v0.1.4>
 
 ✅ **OTA yolu çalışıyor** — v0.1.1 telefona bu yolla kuruldu (2026-09-06).
 Sürüm geçmişi: `v0.1.0` (bozuk) → `v0.1.1` (çökme + indirme düzeltmeleri)
 → `v0.1.2` (ses ikonu/renk) → `v0.1.3` (kalıcı geçmiş §4.11, galeri/MIME
-§4.10, Instagram istikrarı §4.9, dosya açma §4.10).
+§4.10, Instagram istikrarı §4.9, dosya açma §4.10)
+→ `v0.1.4` (MIUI galeri uyumluluğu §4.12).
 
-⚠️ **v0.1.3 telefona kurulana kadar §4.9-§4.11'in hiçbiri denenmiş
+⚠️ **v0.1.4 telefona kurulana kadar §4.9-§4.12'nin hiçbiri denenmiş
 sayılmaz** — telefondaki v0.1.2 bunların hiçbirini içermiyor.
 
-✅ **v0.1.3 uçtan uca doğrulandı** (uygulamanın gittiği API'ye sorularak):
-`tag_name = v0.1.3` · taslak/ön-sürüm değil · `target_commitish` = `94443f6`
+✅ **Her yayın uçtan uca doğrulanıyor** (uygulamanın gittiği API'ye
+sorularak): `tag_name` · taslak/ön-sürüm değil · `target_commitish` = APK'nın kaynağı
 (APK'nın kaynağı) · `app-arm64-v8a-release.apk` istemcinin arm64 süzgecine
 takılıyor · `mapping.txt` ekli · Türkçe notlar bozulmamış.
 
@@ -1294,9 +1359,10 @@ gh release create v0.1.1 `
 | v0.1.0 | `0.1.0+1` | 2001 |
 | v0.1.1 | `0.1.1+2` | 2002 |
 | v0.1.2 | `0.1.2+3` | 2003 |
-| **v0.1.3** | **`0.1.3+4`** | **2004** |
+| v0.1.3 | `0.1.3+4` | 2004 |
+| **v0.1.4** | **`0.1.4+5`** | **2005** |
 
-Tek APK'ya (universal) geçilirse versionCode `4` olur ve **2004'ten küçük
+Tek APK'ya (universal) geçilirse versionCode `5` olur ve **2005'ten küçük
 kaldığı için kurulum reddedilir** — o gün bu hesap hatırlanmalı.
 
 🔑 **Release notu doğrudan kullanıcıya gösteriliyor** (Ayarlar ekranında,

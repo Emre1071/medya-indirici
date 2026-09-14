@@ -49,8 +49,40 @@ class MedyaKaydedici(private val baglam: Context) {
     companion object {
         private const val ETIKET = "MedyaKaydedici"
 
-        /** Ortak klasorlerin altinda acilan uygulama klasoru. */
-        const val KLASOR = "Medya İndirici"
+        /**
+         * Ortak klasorlerin altinda acilan uygulama klasoru.
+         *
+         * 🔑 **ASCII.** Eskiden `Medya İndirici` yaziyordu ve icindeki `İ`
+         * (U+0130) gercek bir risk: bu klasor adi dosya sisteminde birebir
+         * olusuyor, SD kart FAT/exFAT ile bicimlendirilmis olabiliyor ve
+         * uretici tarayicilarinin (MIUI) non-ASCII yol islemesi tutarsiz.
+         * Ad ASCII olunca degisken sayisi bir azaliyor.
+         *
+         * ⚠️ **Eski indirmeler tasinmiyor.** v0.1.3 ve oncesinde inen
+         * dosyalar `Medya İndirici` klasorunde kaliyor; yenileri buraya
+         * iniyor. Tasima yapilmadi: MediaStore kayitlarini toplu
+         * guncellemek, calisan kayitlari bozma riskini "klasor ikiye
+         * bolundu"nun onunde tutuyor. Gecmisteki satirlar `content://`
+         * adresi tasidigi icin **acilmaya devam ediyor.**
+         */
+        const val KLASOR = "MedyaIndirici"
+
+        /**
+         * Videonun indigi ortak klasor.
+         *
+         * ⚠️ **Tek satirlik anahtar, bilerek boyle.** MIUI galerisinin
+         * hangi kokleri taradigi cihazdan cihaza degisiyor; `Movies/`
+         * altindaki uygulama klasorleri bazi surumlerde listelenmiyor.
+         * Telefonda hala gorunmezse denenecek ilk sey burayi
+         * `Environment.DIRECTORY_DCIM` yapmak — MIUI galerisi DCIM'i her
+         * zaman tariyor.
+         *
+         * Varsayilan `Movies` birakildi cunku DCIM semantik olarak
+         * "kamerayla cekilen" demek; indirilen video oraya konunca
+         * kullanicinin kendi cekimlerinin arasina karisiyor. Once daha
+         * dogru olan deneniyor.
+         */
+        private val VIDEO_KLASORU = Environment.DIRECTORY_MOVIES
 
         /** Ad cakismasinda kac kez yeniden denenecegi. */
         private const val AD_DENEME_SINIRI = 30
@@ -196,16 +228,102 @@ class MedyaKaydedici(private val baglam: Context) {
         // Silinmezse ayni dosya telefonda iki kez yer kaplardi.
         kaynak.delete()
 
-        // `MediaScannerConnection.scanFile` BURADA GEREKMIYOR.
-        //
-        // Tarayici, MediaStore'un haberi olmayan dosyalari kataloga
-        // eklemek icin. Burada kaydi zaten MediaStore'un kendisine
-        // yazdik; `IS_PENDING` temizlendigi anda dosya butun oynaticilara
-        // gorunur oluyor. Ayrica taramak bos yere ikinci bir kayit
-        // olusturma riski tasir. (API 28 ve altinda durum farkli — orada
-        // duz dosya yaziliyor ve tarama SART; bkz. `eskiKaydet`.)
+        // Uretici galerisini uyandir. Basarisiz olsa bile kayit gecerli.
+        taramayiZorla(adres)
+
         return Sonuc(adres.toString(), gorecelYol)
     }
+
+    /**
+     * Yeni kaydi uretici galerisine **zorla** duyurur.
+     *
+     * ## Bu, onceki karari tersine ceviriyor
+     * Burada uzun sure "API 29+ yolunda tarama GEREKMIYOR" yaziyordu ve
+     * gerekce teoride dogruydu: kaydi MediaStore'un kendisine yaziyoruz,
+     * `IS_PENDING` temizlendigi anda dosya AOSP'de gorunur oluyor.
+     *
+     * 🔴 **Cihazda boyle cikmadi.** Xiaomi/MIUI'de (Redmi Note 9 Pro,
+     * Android 12) dosya bazen gorunuyor bazen gorunmuyordu. MIUI galerisi
+     * MediaStore'u dogrudan okumuyor; `com.miui.gallery` kendi indeksini
+     * tutuyor ve onu tembel guncelliyor. AOSP'de gereksiz olan adim burada
+     * belirleyici.
+     *
+     * ## Ikinci kayit riski nicin gerceklesmiyor
+     * Eski gerekce "taramak ikinci bir kayit uretebilir" diyordu. Tarayici
+     * **dosya yoluna gore** esleme yapiyor: var olan satiri buluyor ve
+     * guncelliyor, yenisini acmiyor. Bu yuzden yol tahmin EDILMIYOR —
+     * az once yazdigimiz satirin `DATA` sutunu okunuyor. Tahmin edilen
+     * (ve bir harfi tutmayan) bir yol, iste o zaman ikinci kayit uretirdi.
+     *
+     * ## Hicbir sekilde basarisiz olamaz
+     * Dosya zaten yerinde ve MediaStore'da kayitli; bu yalniz bir
+     * "haber ver" adimi. Patlamasi indirmeyi basarisiz saydiramaz.
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun taramayiZorla(adres: Uri) {
+        try {
+            val yol = diskYolu(adres)
+
+            if (yol != null) {
+                // Tarayiciya MIME de veriliyor: vermezsek dosyayi uzantidan
+                // tanimaya calisiyor ve `.opus`/`.weba` gibi uzantilarda
+                // yanlis kategoriye dusurebiliyor.
+                MediaScannerConnection.scanFile(
+                    baglam,
+                    arrayOf(yol),
+                    arrayOf(tipiOku(adres)),
+                    null,
+                )
+            } else {
+                Log.w(ETIKET, "Tarama icin disk yolu bulunamadi: $adres")
+            }
+
+            // Yol okunamasa bile icerik gozlemcileri uyandiriliyor. MIUI
+            // galerisi degisiklik bildirimlerini de dinliyor; iki kanal
+            // birden denenmis oluyor.
+            baglam.contentResolver.notifyChange(adres, null)
+        } catch (h: Throwable) {
+            // Tarama bir iyilestirme, sart degil. Dosya zaten MediaStore'da.
+            Log.w(ETIKET, "Galeri taramasi tetiklenemedi", h)
+        }
+    }
+
+    /**
+     * MediaStore kaydinin diskteki gercek yolu.
+     *
+     * `DATA` sutunu API 29'da kullanimdan kaldirildi ama **okunabilir
+     * kalmaya devam ediyor** — yazmak yasak, okumak degil. Tarayicinin
+     * dosya yolundan baska bir girdisi olmadigi icin baska yol yok.
+     *
+     * Yol kendimiz kurmuyoruz (`RELATIVE_PATH` + `DISPLAY_NAME`):
+     * MediaProvider adi degistirmis olabiliyor (uzanti duzeltmesi, ad
+     * cakismasinda sayi ekleme). Kurulan yol bir harf tutmazsa tarayici
+     * "yeni dosya" sanip IKINCI bir kayit acar — kacinmak istedigimiz sey.
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun diskYolu(adres: Uri): String? {
+        @Suppress("DEPRECATION")
+        val sutun = MediaStore.MediaColumns.DATA
+
+        baglam.contentResolver
+            .query(adres, arrayOf(sutun), null, null, null)
+            ?.use { imlec ->
+                if (!imlec.moveToFirst()) return null
+                val dizin = imlec.getColumnIndex(sutun)
+                if (dizin < 0) return null
+                return imlec.getString(dizin)?.takeIf { it.isNotBlank() }
+            }
+        return null
+    }
+
+    /** Kaydin MediaStore'daki MIME turu; okunamazsa `null`. */
+    private fun tipiOku(adres: Uri): String? =
+        try {
+            baglam.contentResolver.getType(adres)
+        } catch (h: Throwable) {
+            Log.w(ETIKET, "MIME okunamadi: $adres", h)
+            null
+        }
 
     /**
      * MediaStore kaydini acar; ad cakisirsa sonuna sayi ekleyerek dener.
@@ -327,7 +445,7 @@ class MedyaKaydedici(private val baglam: Context) {
     // -------------------------------------------------------------- ortak
 
     private fun anaKlasor(sesMi: Boolean): String =
-        if (sesMi) Environment.DIRECTORY_MUSIC else Environment.DIRECTORY_MOVIES
+        if (sesMi) Environment.DIRECTORY_MUSIC else VIDEO_KLASORU
 
     /**
      * Dosyanin MIME turu.

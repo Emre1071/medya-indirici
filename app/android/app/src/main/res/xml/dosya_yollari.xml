@@ -24,6 +24,15 @@
 -->
 <paths>
     <cache-path name="guncelleme" path="." />
-    <external-path name="muzik" path="Music/Medya İndirici/" />
-    <external-path name="filmler" path="Movies/Medya İndirici/" />
+
+    <!-- ASCII adlar: klasor adindaki `İ` (U+0130) kaldirildi, gerekcesi
+         MedyaKaydedici.KLASOR icinde. -->
+    <external-path name="muzik" path="Music/MedyaIndirici/" />
+    <external-path name="filmler" path="Movies/MedyaIndirici/" />
+
+    <!-- v0.1.3 ve oncesinde inen dosyalar eski klasorde kaldi ve
+         "Aç" onlar icin de calismali. Iki satir bu yuzden duruyor;
+         eski indirmeler tukendiginde silinebilirler. -->
+    <external-path name="muzik_eski" path="Music/Medya İndirici/" />
+    <external-path name="filmler_eski" path="Movies/Medya İndirici/" />
 </paths>
