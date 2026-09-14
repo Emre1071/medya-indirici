@@ -10,7 +10,7 @@
 > 🔒 **Bu dosya işle birlikte güncellenir** — her kritik değişiklik, hata
 > çözümü ve sürüm yükseltmesinden sonra. Kuralın tamamı §8 başında.
 >
-> Son güncelleme: 2026-09-14 — **v0.1.5 kodda hazır** (`0.1.5+6`,
+> Son güncelleme: 2026-09-14 — **v0.1.5 yayında** (commit `fef7c99`,
 > versionCode 2006). v0.1.4 cihazda denendi ve **iki şey çürüdü** (§4.12):
 > MIUI `Movies/` kökünü taramıyor → video artık **`DCIM/MedyaIndirici`**;
 > uygulama içinden açma tutmuyordu → **sıralı aday denemesi** (§4.10).
@@ -1283,9 +1283,9 @@ yazılır, derleme orada koşar. Bu bir çözüm değil, ölçüm yöntemi.
 | GitHub CLI (`gh` 2.100.0) + oturum (`Emre1071`) | ✅ |
 | Uzak depo — **github.com/Emre1071/medya-indirici** (public) | ✅ push edildi |
 | Kalıcı imza anahtarı | ✅ §12 |
-| **Yayındaki sürüm: `v0.1.4`** | ✅ APK + `mapping.txt` ekli — **v0.1.5 kodda hazır, yayınlanmadı** |
+| **Yayındaki sürüm: `v0.1.5`** | ✅ APK + `mapping.txt` ekli |
 
-Release: <https://github.com/Emre1071/medya-indirici/releases/tag/v0.1.4>
+Release: <https://github.com/Emre1071/medya-indirici/releases/tag/v0.1.5>
 
 ✅ **OTA yolu çalışıyor** — v0.1.1 telefona bu yolla kuruldu (2026-09-06).
 Sürüm geçmişi: `v0.1.0` (bozuk) → `v0.1.1` (çökme + indirme düzeltmeleri)
