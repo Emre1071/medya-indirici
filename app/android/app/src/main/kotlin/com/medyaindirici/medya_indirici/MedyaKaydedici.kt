@@ -70,19 +70,28 @@ class MedyaKaydedici(private val baglam: Context) {
         /**
          * Videonun indigi ortak klasor.
          *
-         * ⚠️ **Tek satirlik anahtar, bilerek boyle.** MIUI galerisinin
-         * hangi kokleri taradigi cihazdan cihaza degisiyor; `Movies/`
-         * altindaki uygulama klasorleri bazi surumlerde listelenmiyor.
-         * Telefonda hala gorunmezse denenecek ilk sey burayi
-         * `Environment.DIRECTORY_DCIM` yapmak — MIUI galerisi DCIM'i her
-         * zaman tariyor.
+         * 🔴 **DCIM, cunku MIUI `Movies/` kokunu taramiyor.** v0.1.4'te
+         * `Movies` denendi ve cihazda dogrulandi: dosya
+         * `Movies/MedyaIndirici` altinda olusuyor, dosya yoneticisinden
+         * aciliyor, ama **MIUI Galerisi'ne hic dusmuyor.** Yani sorun ne
+         * klasor adindaki Turkce karakterdi ne de taramanin
+         * tetiklenmemesi — MIUI galerisinin taradigi **kok kumesi**.
          *
-         * Varsayilan `Movies` birakildi cunku DCIM semantik olarak
-         * "kamerayla cekilen" demek; indirilen video oraya konunca
-         * kullanicinin kendi cekimlerinin arasina karisiyor. Once daha
-         * dogru olan deneniyor.
+         * DCIM her galeri uygulamasinin taradigi tek koktur; standart
+         * cihazlarda da dogru calisiyor.
+         *
+         * ⚠️ **Bedeli kabul edildi:** DCIM semantik olarak "kamerayla
+         * cekilen" demek ve indirilen videolar kullanicinin kendi
+         * cekimlerinin arasina giriyor. Ayri bir alt klasorde
+         * (`DCIM/MedyaIndirici`) durduklari icin karisiklik klasor
+         * seviyesinde degil, yalniz "tum fotograflar" akisinda.
+         * Gorunmeyen dosya, yanlis yerde gorunen dosyadan kotudur.
+         *
+         * ℹ️ Ses bu tartismanin disinda: muzik calarlar
+         * `MediaStore.Audio`'yu klasorden bagimsiz okuyor ve galeri sesle
+         * ilgilenmiyor. Ses `Music/` altinda kaliyor.
          */
-        private val VIDEO_KLASORU = Environment.DIRECTORY_MOVIES
+        private val VIDEO_KLASORU = Environment.DIRECTORY_DCIM
 
         /** Ad cakismasinda kac kez yeniden denenecegi. */
         private const val AD_DENEME_SINIRI = 30

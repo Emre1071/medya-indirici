@@ -38,13 +38,34 @@ class _IndirilenlerEkraniState extends State<IndirilenlerEkrani> {
       return;
     }
 
-    final hata = await _acici.ac(yol);
+    final hata = await _acici.ac(
+      yol,
+      tur: is_.tur == IndirmeTuru.ses ? 'ses' : 'video',
+    );
     if (!mounted || hata == null) return;
-    _bildir(hata);
+
+    // Ayrinti varsa "Neden?" dugmesi konuyor: dosyanin acilmamasi cihaza
+    // ozgu ve gorunmez bir sebepten olabiliyor (MIUI'de oldugu gibi).
+    // Snackbar'a sigmayan dokum, dokununca aciliyor.
+    _bildir(hata.mesaj, ayrinti: hata.ayrinti);
   }
 
-  void _bildir(String metin) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(metin)));
+  void _bildir(String metin, {String? ayrinti}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(metin),
+        duration: Duration(seconds: ayrinti == null ? 4 : 8),
+        action: ayrinti == null
+            ? null
+            : SnackBarAction(
+                label: 'Neden?',
+                onPressed: () => _ayrintiyiGoster(
+                  'Dosya açılamadı',
+                  ayrinti,
+                ),
+              ),
+      ),
+    );
   }
 
   /// Dosya nicin disari cikarilamadi — ham metin, kopyalanabilir.
@@ -53,12 +74,12 @@ class _IndirilenlerEkraniState extends State<IndirilenlerEkrani> {
   /// Ama cihaz `adb`'ye baglanamadigi icin (§4.5) telefondan tani almanin
   /// tek yolu bu. Ayni kalip motor kurulum hatasinda ve basarisiz
   /// indirmede zaten kullaniliyor.
-  void _kayitHatasiniGoster(String ayrinti) {
+  void _ayrintiyiGoster(String baslik, String ayrinti) {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Renkler.yuzey,
-        title: const Text('Dosya telefona çıkarılamadı'),
+        title: Text(baslik),
         content: SingleChildScrollView(
           child: SelectableText(
             ayrinti,
@@ -123,7 +144,10 @@ class _IndirilenlerEkraniState extends State<IndirilenlerEkrani> {
                                 'Bu dosya telefonun klasörlerine '
                                 'çıkarılamadı, uygulamanın içinde duruyor.',
                               )
-                          : () => _kayitHatasiniGoster(kayitHatasi),
+                          : () => _ayrintiyiGoster(
+                                'Dosya telefona çıkarılamadı',
+                                kayitHatasi,
+                              ),
                     )
                   : IconButton(
                       tooltip: 'Aç',

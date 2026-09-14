@@ -10,12 +10,12 @@
 > 🔒 **Bu dosya işle birlikte güncellenir** — her kritik değişiklik, hata
 > çözümü ve sürüm yükseltmesinden sonra. Kuralın tamamı §8 başında.
 >
-> Son güncelleme: 2026-09-14 — **v0.1.4 yayında** (versionCode 2005):
-> **MIUI galeri uyumluluğu** §4.12 — zorunlu tarama, ASCII klasör adı,
-> oynatıcı seçicisi. v0.1.3'te gelenler: Instagram kararsızlığı §4.9,
-> dosya açma + çıkarma tanısı §4.10, **kalıcı geçmiş** §4.11. Testler 62.
-> 🔴 **Hiçbiri cihazda denenmedi** — telefondaki hâlâ v0.1.2, önce OTA ile
-> v0.1.4 kurulmalı (§7 sonundaki maddeler).
+> Son güncelleme: 2026-09-14 — **v0.1.5 kodda hazır** (`0.1.5+6`,
+> versionCode 2006). v0.1.4 cihazda denendi ve **iki şey çürüdü** (§4.12):
+> MIUI `Movies/` kökünü taramıyor → video artık **`DCIM/MedyaIndirici`**;
+> uygulama içinden açma tutmuyordu → **sıralı aday denemesi** (§4.10).
+> v0.1.3'te gelenler: §4.9 Instagram, §4.10 açma, §4.11 kalıcı geçmiş.
+> Testler 62.
 > Öncesi: OTA doğrulandı (v0.1.1), ses ikonu §6, R8 §4.6, çökme §4.4-§4.5,
 > paylaş menüsü §4.3, imza anahtarı §12, derleme engeli §10.
 
@@ -44,7 +44,8 @@
 | Elle yapıştırılan link "desteklenmiyor" diyor | `Baglanti.ayikla` yalnız paylaş menüsü yolunda çağrılıyordu | §4.9 |
 | "Aç" düğmesi hiçbir şey yapmıyor | Açma zinciri hiç yazılmamıştı; `<queries>` yoksa `resolveActivity` hep `null` | §4.10 |
 | Uygulama kapanınca geçmiş boş | Geçmiş yalnız bellekteydi | §4.11 |
-| Xiaomi/MIUI'de dosya bazen galeride yok | MIUI kendi indeksini tembel günceller; MediaStore'u doğrudan okumuyor | §4.12 |
+| Xiaomi/MIUI'de dosya galeride yok | MIUI `Movies/` kökünü taramıyor → video DCIM'e alındı | §4.12 |
+| Dosya yöneticisinden açılıyor ama uygulamadan açılmıyor | `external_primary` birim adı / çözülemeyen MIME / sağlayıcı erişimi | §4.10 |
 | Kotlin'de "Unclosed comment" / "top level declaration bekleniyor" | Yorumda `audio/` + yıldız — blok yorumlar iç içe geçiyor | §4.10 |
 
 **Tekrar eden ders:** bu projedeki hataların çoğu **derlemede görünmüyor,
@@ -1101,7 +1102,8 @@ Uzun süre hiçbir şey telefonda çalışmamıştı; artık ayrım net tutulmal
 | **Kalıcı geçmiş** (kapat-aç) | ❓ §4.11 — hiç denenmedi |
 | **Dosyayı açma / paylaşma** | ❓ §4.10 — hiç denenmedi |
 | **Instagram istikrarı** | ❓ §4.9 — hiç denenmedi |
-| **MIUI'de galeride görünme** | ❓ §4.12 — hiç denenmedi; **asıl sınanacak şey bu** |
+| **MIUI'de galeride görünme** | 🔴 v0.1.4'te **BAŞARISIZ** — dosya `Movies/MedyaIndirici`'de var, dosya yöneticisi açıyor, MIUI Galerisi görmüyor. v0.1.5'te DCIM'e alındı, yeniden denenecek |
+| **Uygulama içinden açma** | 🔴 v0.1.4'te **BAŞARISIZ** — dosya yöneticisinden açılıyor, karttan açılmıyor. v0.1.5'te sıralı aday + görünür hata |
 | **İptal** | ❓ hiç denenmedi |
 | **OTA güncelleme** (indir + kur) | ✅ **v0.1.1 telefona OTA ile kuruldu** (2026-09-06) — kontrol, indirme, izin ve kurulum adımlarının tamamı çalışıyor |
 
@@ -1281,7 +1283,7 @@ yazılır, derleme orada koşar. Bu bir çözüm değil, ölçüm yöntemi.
 | GitHub CLI (`gh` 2.100.0) + oturum (`Emre1071`) | ✅ |
 | Uzak depo — **github.com/Emre1071/medya-indirici** (public) | ✅ push edildi |
 | Kalıcı imza anahtarı | ✅ §12 |
-| **Yayındaki sürüm: `v0.1.4`** | ✅ APK + `mapping.txt` ekli |
+| **Yayındaki sürüm: `v0.1.4`** | ✅ APK + `mapping.txt` ekli — **v0.1.5 kodda hazır, yayınlanmadı** |
 
 Release: <https://github.com/Emre1071/medya-indirici/releases/tag/v0.1.4>
 
@@ -1289,7 +1291,8 @@ Release: <https://github.com/Emre1071/medya-indirici/releases/tag/v0.1.4>
 Sürüm geçmişi: `v0.1.0` (bozuk) → `v0.1.1` (çökme + indirme düzeltmeleri)
 → `v0.1.2` (ses ikonu/renk) → `v0.1.3` (kalıcı geçmiş §4.11, galeri/MIME
 §4.10, Instagram istikrarı §4.9, dosya açma §4.10)
-→ `v0.1.4` (MIUI galeri uyumluluğu §4.12).
+→ `v0.1.4` (MIUI denemesi — §4.12, **yetmedi**)
+→ `v0.1.5` (video DCIM'e, sıralı açma denemesi).
 
 ⚠️ **v0.1.4 telefona kurulana kadar §4.9-§4.12'nin hiçbiri denenmiş
 sayılmaz** — telefondaki v0.1.2 bunların hiçbirini içermiyor.
@@ -1360,9 +1363,10 @@ gh release create v0.1.1 `
 | v0.1.1 | `0.1.1+2` | 2002 |
 | v0.1.2 | `0.1.2+3` | 2003 |
 | v0.1.3 | `0.1.3+4` | 2004 |
-| **v0.1.4** | **`0.1.4+5`** | **2005** |
+| v0.1.4 | `0.1.4+5` | 2005 |
+| **v0.1.5** | **`0.1.5+6`** | **2006** |
 
-Tek APK'ya (universal) geçilirse versionCode `5` olur ve **2005'ten küçük
+Tek APK'ya (universal) geçilirse versionCode `6` olur ve **2006'dan küçük
 kaldığı için kurulum reddedilir** — o gün bu hesap hatırlanmalı.
 
 🔑 **Release notu doğrudan kullanıcıya gösteriliyor** (Ayarlar ekranında,

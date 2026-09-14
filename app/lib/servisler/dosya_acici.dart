@@ -21,28 +21,40 @@ class DosyaAcici {
 
   /// Dosyayi uygun bir uygulamada acar.
   ///
-  /// Basarisizlikta **kullaniciya gosterilecek** Turkce cumle doner;
-  /// basarida `null`. Istisna firlatmiyor: "Aç" dugmesi, basilinca kirmizi
-  /// bir hata ekrani acacak bir sey degil.
-  Future<String?> ac(String yol) => _calistir('dosyaAc', yol);
+  /// Basarisizlikta [AcmaHatasi] doner, basarida `null`. Istisna
+  /// firlatmiyor: "Aç" dugmesi, basilinca kirmizi bir hata ekrani acacak
+  /// bir sey degil.
+  ///
+  /// [tur] isin `ses`/`video` alani. Android tarafi MIME cozemezse yedek
+  /// degeri buna gore seciyor; tahmin etmek yanlis uygulamalari listeye
+  /// sokar ya da dogrularini eler.
+  Future<AcmaHatasi?> ac(String yol, {required String tur}) =>
+      _calistir('dosyaAc', yol, tur);
 
   /// Dosyayi paylasim menusune verir.
-  Future<String?> paylas(String yol) => _calistir('dosyaPaylas', yol);
+  Future<AcmaHatasi?> paylas(String yol, {required String tur}) =>
+      _calistir('dosyaPaylas', yol, tur);
 
-  Future<String?> _calistir(String yontem, String yol) async {
+  Future<AcmaHatasi?> _calistir(String yontem, String yol, String tur) async {
     if (!destekleniyor) {
-      return 'Dosya açma yalnızca telefonda çalışıyor.';
+      return const AcmaHatasi('Dosya açma yalnızca telefonda çalışıyor.');
     }
 
     try {
-      await _kanal.invokeMethod<bool>(yontem, {'yol': yol});
+      await _kanal.invokeMethod<bool>(yontem, {'yol': yol, 'tur': tur});
       return null;
     } on PlatformException catch (h) {
-      return _hataCevir(h.code);
+      // 🔑 Ayrinti YUTULMUYOR. Android tarafi denedigi butun yollari ve
+      // her birinin nicin tutmadigini dokuyor; cihaz `adb`'ye
+      // baglanamadigi icin sebebi ogrenmenin baska yolu yok. Kullaniciya
+      // kendiliginden gosterilmiyor, karta dokununca kopyalaniyor.
+      return AcmaHatasi(_hataCevir(h.code), ayrinti: h.details as String?);
     } on MissingPluginException {
       // Kanal yoksa (beklenmedik derleme) kullaniciyi teknik bir metinle
       // karsilamak yerine yapabilecegi seyi soyluyoruz.
-      return 'Dosya açılamadı. Uygulamayı güncellemeyi dene.';
+      return const AcmaHatasi(
+        'Dosya açılamadı. Uygulamayı güncellemeyi dene.',
+      );
     }
   }
 
@@ -60,4 +72,17 @@ class DosyaAcici {
               'çalar veya video oynatıcı kurmayı dene.',
         _ => 'Dosya açılamadı.',
       };
+}
+
+/// Dosya acilamadiginda donen sonuc.
+///
+/// [mesaj] kullaniciya gosteriliyor; [ayrinti] denenen yollarin dokumu ve
+/// yalnizca istendiginde aciliyor. Ayrimin gerekcesi `MotorHatasi` ile
+/// ayni: ham metin kullaniciya yapabilecegi hicbir sey soylemiyor, ama
+/// sorunu cozen tek sey o.
+class AcmaHatasi {
+  final String mesaj;
+  final String? ayrinti;
+
+  const AcmaHatasi(this.mesaj, {this.ayrinti});
 }

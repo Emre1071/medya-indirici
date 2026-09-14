@@ -26,8 +26,16 @@
     <cache-path name="guncelleme" path="." />
 
     <!-- ASCII adlar: klasor adindaki `İ` (U+0130) kaldirildi, gerekcesi
-         MedyaKaydedici.KLASOR icinde. -->
+         MedyaKaydedici.KLASOR icinde.
+
+         DCIM v0.1.5'te video icin ASIL hedef oldu: MIUI galerisi `Movies/`
+         kokunu taramiyor (cihazda dogrulandi). Gerekce
+         MedyaKaydedici.VIDEO_KLASORU icinde.
+
+         Bu yollar yalnizca "Aç" zincirinin FileProvider yedegi icin
+         gerekiyor; API 29+ akisi `content://` kullaniyor. -->
     <external-path name="muzik" path="Music/MedyaIndirici/" />
+    <external-path name="kamera" path="DCIM/MedyaIndirici/" />
     <external-path name="filmler" path="Movies/MedyaIndirici/" />
 
     <!-- v0.1.3 ve oncesinde inen dosyalar eski klasorde kaldi ve

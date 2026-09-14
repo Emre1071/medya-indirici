@@ -1,10 +1,10 @@
 package com.medyaindirici.medya_indirici
 
 import android.app.Activity
-import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.provider.MediaStore
 import android.util.Log
 import android.webkit.MimeTypeMap
 import androidx.core.content.FileProvider
@@ -69,15 +69,56 @@ class DosyaKoprusu(private val etkinlik: Activity) {
                 return@setMethodCallHandler
             }
 
+            // Tur Dart tarafindan geliyor (isin `ses`/`video` alani).
+            // Tahmin etmiyoruz: MIME cozulemezse yedek deger buna bakiyor
+            // ve yanlis tahmin, dosyayi acabilecek uygulamayi listeden
+            // eler.
+            val tur = cagri.argument<String>("tur")
+
             when (cagri.method) {
-                "dosyaAc" -> calistir(yol, paylas = false, cevap = cevap)
-                "dosyaPaylas" -> calistir(yol, paylas = true, cevap = cevap)
+                "dosyaAc" -> calistir(yol, tur, paylas = false, cevap = cevap)
+                "dosyaPaylas" -> calistir(yol, tur, paylas = true, cevap = cevap)
                 else -> cevap.notImplemented()
             }
         }
     }
 
-    private fun calistir(yol: String, paylas: Boolean, cevap: MethodChannel.Result) {
+    /**
+     * Dosyayi acar/paylasir — **birden fazla yol deneyerek.**
+     *
+     * ## Nicin tek deneme yetmedi
+     * v0.1.4'te dosya yoneticisinden aciliyor ama uygulamadan acilmiyordu.
+     * Tek bir niyet kuruluyordu ve tutmadiginda elde hicbir bilgi
+     * kalmiyordu. Uc ayri sebep ayni belirtiyi uretiyor:
+     *
+     * 1. **`external_primary` birim adi.** Kayit
+     *    `MediaStore.VOLUME_EXTERNAL_PRIMARY` ile aciliyor ve adres
+     *    `content://media/external_primary/...` oluyor. Bircok oynatici
+     *    yalnizca klasik `content://media/external/...` bicimini tanıyor.
+     * 2. **MIME cozulemiyor.** `getType()` `null` veya
+     *    `application/octet-stream` donerse niyet hicbir uygulamaya
+     *    eslesmiyor.
+     * 3. **Saglayici erisimi.** Bazi uretici oynaticilari MediaStore
+     *    adresini okuyamiyor; FileProvider adresi calisiyor (o saglayiciyi
+     *    biz sahiplendigimiz icin izni birebir yazabiliyoruz).
+     *
+     * Adaylar sirayla deneniyor, ilk tutan kazaniyor.
+     *
+     * ## Hata artik yutulmuyor
+     * Hicbiri tutmazsa **butun denemelerin dokumu** Dart tarafina
+     * `ayrinti` olarak gidiyor ve karta dokununca kopyalanabiliyor.
+     * Cihaz `adb`'ye baglanamadigi icin (§4.5) sebebi ogrenmenin baska
+     * yolu yok — ayni kalip motor kurulumunda ve indirmede zaten
+     * kullaniliyor.
+     */
+    private fun calistir(
+        yol: String,
+        tur: String?,
+        paylas: Boolean,
+        cevap: MethodChannel.Result,
+    ) {
+        val gunluk = StringBuilder("Yol: $yol\nTur: ${tur ?: "bilinmiyor"}\n")
+
         try {
             val adres = adreseCevir(yol)
             if (adres == null) {
@@ -87,68 +128,189 @@ class DosyaKoprusu(private val etkinlik: Activity) {
                 cevap.error(
                     "DOSYA_YOK",
                     "Dosya bulunamadi, silinmis olabilir",
-                    null,
+                    gunluk.toString(),
                 )
                 return
             }
 
-            val mime = mimeBul(adres, yol)
+            val mime = mimeBul(adres, yol, tur)
+            gunluk.append("MIME: $mime\n")
 
-            if (paylas) {
-                baslat(paylasimNiyeti(adres, mime), adres)
-            } else {
-                acmayiDene(adres, mime)
+            val adaylar = adaylariKur(adres, mime, paylas, gunluk)
+
+            for (aday in adaylar) {
+                try {
+                    izinVer(aday.niyet, aday.adres)
+                    etkinlik.startActivity(aday.niyet)
+                    gunluk.append("TUTTU: ${aday.ad}\n")
+                    Log.i(ETIKET, "Acildi (${aday.ad}): $yol")
+                    cevap.success(true)
+                    return
+                } catch (h: Throwable) {
+                    // ActivityNotFoundException, SecurityException ve
+                    // digerleri burada toplaniyor; bir sonraki aday
+                    // deneniyor. Yutulmuyorlar — dokume yaziliyorlar.
+                    gunluk.append("${aday.ad}: ${h.javaClass.simpleName}")
+                    h.message?.let { gunluk.append(" — ").append(it) }
+                    gunluk.append('\n')
+                    Log.w(ETIKET, "Aday tutmadi: ${aday.ad}", h)
+                }
             }
-            cevap.success(true)
-        } catch (h: ActivityNotFoundException) {
-            // Telefonda bu turu acabilecek uygulama yok. Ham istisna
-            // metnini gostermek kullaniciya hicbir sey soylemez.
-            Log.w(ETIKET, "Acacak uygulama yok: $yol", h)
-            cevap.error("UYGULAMA_YOK", "Bu dosyayi açacak uygulama yok", null)
+
+            cevap.error(
+                "ACILAMADI",
+                "Dosya açılamadı; hiçbir uygulama yanıt vermedi",
+                gunluk.toString(),
+            )
         } catch (h: Throwable) {
+            gunluk.append("Beklenmeyen: ${sebepZinciri(h)}")
             Log.e(ETIKET, "Dosya acilamadi: $yol", h)
-            cevap.error("ACILAMADI", h.message, null)
+            cevap.error("ACILAMADI", h.message, gunluk.toString())
+        }
+    }
+
+    /** Denenecek tek bir yol. */
+    private data class Aday(val ad: String, val adres: Uri, val niyet: Intent)
+
+    /**
+     * Denenecek yollar — **en dogrudan olandan en toleransliya.**
+     *
+     * Sira onemli: ilk aday tutarsa kullanici hicbir secim ekrani gormuyor.
+     * Secici en sona konuyor cunku her seferinde acilmasi, calisan bir
+     * varsayilani olan kullaniciya fazladan bir dokunus ekler.
+     */
+    private fun adaylariKur(
+        adres: Uri,
+        mime: String,
+        paylas: Boolean,
+        gunluk: StringBuilder,
+    ): List<Aday> {
+        val liste = mutableListOf<Aday>()
+
+        fun ekle(ad: String, hedef: Uri) {
+            val niyet = if (paylas) paylasimNiyeti(hedef, mime)
+            else acmaNiyeti(hedef, mime)
+            liste.add(Aday(ad, hedef, niyet))
+        }
+
+        // 1) Klasik birim adiyla MediaStore adresi (en genis uyumluluk).
+        uyumluAdres(adres)?.let {
+            gunluk.append("Aday 1: $it\n")
+            ekle("media/external", it)
+        }
+
+        // 2) Elimizdeki adres, oldugu gibi.
+        gunluk.append("Aday 2: $adres\n")
+        ekle("verilen adres", adres)
+
+        // 3) FileProvider. Diskteki gercek yol MediaStore'dan okunuyor;
+        //    bu saglayiciyi BIZ sahiplendigimiz icin okuma iznini karsi
+        //    uygulamaya birebir yazabiliyoruz (MediaStore'a yazamayiz).
+        diskYolu(adres)?.let { diskte ->
+            try {
+                val dosya = File(diskte)
+                if (dosya.exists()) {
+                    val saglayici = FileProvider.getUriForFile(
+                        etkinlik,
+                        "${etkinlik.packageName}.dosyalar",
+                        dosya,
+                    )
+                    gunluk.append("Aday 3: $saglayici ($diskte)\n")
+                    ekle("FileProvider", saglayici)
+                } else {
+                    gunluk.append("Aday 3 atlandi: disk yolu yok ($diskte)\n")
+                }
+            } catch (h: Throwable) {
+                // Yol `dosya_yollari.xml`'deki agaclarin disindaysa
+                // FileProvider istisna atiyor. Yedegin yoklugu asil
+                // adaylari etkilemiyor.
+                gunluk.append("Aday 3 kurulamadi: ${h.message}\n")
+                Log.w(ETIKET, "FileProvider yedegi kurulamadi: $diskte", h)
+            }
+        }
+
+        // 4) Secici: MIME'i tam eslesmeyen uygulamalari da listeliyor.
+        val ilk = liste.firstOrNull()
+        if (ilk != null) {
+            val baslik = if (paylas) "Paylaş" else "Aç"
+            liste.add(
+                Aday(
+                    "secici",
+                    ilk.adres,
+                    Intent.createChooser(ilk.niyet, baslik).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    },
+                )
+            )
+        }
+        return liste
+    }
+
+    /**
+     * `content://media/external_primary/...` → `content://media/external/...`
+     *
+     * 🔑 Kayit `VOLUME_EXTERNAL_PRIMARY` ile aciliyor ve donen adres o birim
+     * adini tasiyor. Ikisi ayni satiri gosteriyor, ama ucuncu taraf
+     * oynaticilarin cogu yalnizca klasik `external` bicimini bekliyor ve
+     * digerini "tanimadigim adres" diye reddediyor. Ayni satira giden
+     * ikinci bir kapi.
+     *
+     * MediaStore adresi degilse `null`.
+     */
+    private fun uyumluAdres(adres: Uri): Uri? {
+        if (adres.authority != MediaStore.AUTHORITY) return null
+
+        val parcalar = adres.pathSegments
+        if (parcalar.size < 2) return null
+        if (parcalar[0] != MediaStore.VOLUME_EXTERNAL_PRIMARY) return null
+
+        val kurucu = adres.buildUpon().path(null)
+        kurucu.appendPath(MediaStore.VOLUME_EXTERNAL)
+        parcalar.drop(1).forEach { kurucu.appendPath(it) }
+        return kurucu.build()
+    }
+
+    /**
+     * MediaStore kaydinin diskteki gercek yolu; yoksa `null`.
+     *
+     * `DATA` sutunu API 29'da kullanimdan kaldirildi ama **okunabilir**
+     * kalmaya devam ediyor (yazmak yasak, okumak degil). FileProvider
+     * yedegi icin baska bir girdi yok.
+     */
+    private fun diskYolu(adres: Uri): String? {
+        // `content` disi bir sema (API 24-28 duz yolu) zaten dosya yolu.
+        if (adres.scheme != "content") return adres.path
+
+        @Suppress("DEPRECATION")
+        val sutun = MediaStore.MediaColumns.DATA
+
+        return try {
+            etkinlik.contentResolver
+                .query(adres, arrayOf(sutun), null, null, null)
+                ?.use { imlec ->
+                    if (!imlec.moveToFirst()) return null
+                    val dizin = imlec.getColumnIndex(sutun)
+                    if (dizin < 0) return null
+                    imlec.getString(dizin)?.takeIf { it.isNotBlank() }
+                }
+        } catch (h: Throwable) {
+            Log.w(ETIKET, "Disk yolu okunamadi: $adres", h)
+            null
         }
     }
 
     /**
-     * Dosyayi acar; dogrudan yol tutmazsa seciciye duser.
+     * Okuma iznini karsi uygulamaya **acikca** yazar.
      *
-     * ## Nicin iki asamali
-     * 🔑 **`content://` adresi galeri indeksinden bagimsiz calisir** —
-     * dosyayi MediaStore sunuyor, oynatici onu galeride gormemis olsa bile
-     * aciyor. Yani "galeride gorunmuyor" ile "acilmiyor" ayri sorunlar ve
-     * ilkinin cozumunu beklemeye gerek yok.
-     *
-     * Ama dogrudan `ACTION_VIEW` tek bir varsayilan uygulamaya gidiyor ve
-     * o uygulama bozuksa (MIUI'de varsayilan oynatici bazen tanimadigi
-     * saglayicidan okumayi reddediyor) is orada bitiyordu. Ikinci asama
-     * seciciyi aciyor: kullanici calisan bir uygulamayi kendi seciyor.
+     * ⚠️ Yalnizca KENDI saglayicimiz icin. `grantUriPermission` sahibi
+     * olmadigin bir saglayici icin cagrildiginda `SecurityException`
+     * atiyor — MediaStore adresinde her seferinde patlayip gunlugu
+     * kirletiyordu. Bayrak (`FLAG_GRANT_READ_URI_PERMISSION`) zaten
+     * niyetin uzerinde duruyor; bu yalnizca ek bir saglamlastirma.
      */
-    private fun acmayiDene(adres: Uri, mime: String) {
-        val niyet = acmaNiyeti(adres, mime)
+    private fun izinVer(niyet: Intent, adres: Uri) {
+        if (adres.authority != "${etkinlik.packageName}.dosyalar") return
 
-        try {
-            baslat(niyet, adres)
-            return
-        } catch (h: ActivityNotFoundException) {
-            Log.w(ETIKET, "Dogrudan acma tutmadi, secici denenecek", h)
-        }
-
-        // Secici, MIME'i tam eslesmeyen uygulamalari da listeliyor.
-        baslat(Intent.createChooser(niyet, "Aç"), adres)
-    }
-
-    /**
-     * Niyeti baslatir ve okuma iznini **acikca** verir.
-     *
-     * `FLAG_GRANT_READ_URI_PERMISSION` cogu cihazda yetiyor. Bazi uretici
-     * arayuzlerinde (MIUI dahil) karsi uygulama adresi yine okuyamiyor;
-     * `grantUriPermission` izni paket adina birebir yaziyor. Cozumlenen
-     * uygulama yoksa dongu bos gecip `startActivity`'nin kendi istisnasini
-     * cagirana birakiyor.
-     */
-    private fun baslat(niyet: Intent, adres: Uri) {
         try {
             etkinlik.packageManager
                 .queryIntentActivities(niyet, PackageManager.MATCH_DEFAULT_ONLY)
@@ -160,11 +322,24 @@ class DosyaKoprusu(private val etkinlik: Activity) {
                     )
                 }
         } catch (h: Throwable) {
-            // Izin yazilamadiysa bayrak yine duruyor; denemeye devam.
             Log.w(ETIKET, "Uri izni acikca verilemedi", h)
         }
+    }
 
-        etkinlik.startActivity(niyet)
+    /** Istisnanin sebep zinciri; distaki mesaj cogu zaman bos. */
+    private fun sebepZinciri(h: Throwable): String {
+        val yazi = StringBuilder()
+        var sira: Throwable? = h
+        var derinlik = 0
+        while (sira != null && derinlik < 5) {
+            yazi.append(if (derinlik == 0) "" else "  sebep: ")
+            yazi.append(sira.javaClass.simpleName)
+            sira.message?.let { yazi.append(": ").append(it) }
+            yazi.append('\n')
+            sira = sira.cause
+            derinlik++
+        }
+        return yazi.toString()
     }
 
     /**
@@ -198,14 +373,45 @@ class DosyaKoprusu(private val etkinlik: Activity) {
      * bolu ikilisi blok yorumu erken kapatir (derleyici bunu "top level
      * declaration bekleniyor" diye bildiriyor ve sebep hic gorunmuyor).
      */
-    private fun mimeBul(adres: Uri, yol: String): String {
+    private fun mimeBul(adres: Uri, yol: String, tur: String?): String {
         if (adres.scheme == "content") {
-            etkinlik.contentResolver.getType(adres)?.let { return it }
+            val sistemden = try {
+                etkinlik.contentResolver.getType(adres)
+            } catch (h: Throwable) {
+                Log.w(ETIKET, "getType patladi: $adres", h)
+                null
+            }
+            if (kullanilirMi(sistemden)) return sistemden!!
         }
 
         val uzanti = yol.substringAfterLast('.', "").lowercase()
-        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(uzanti) ?: "*/*"
+        val uzantidan = MimeTypeMap.getSingleton().getMimeTypeFromExtension(uzanti)
+        if (kullanilirMi(uzantidan)) return uzantidan!!
+
+        // Son care: isin turune gore joker. Dart tarafi `ses`/`video`
+        // gonderiyor, tahmin edilmiyor.
+        return when (tur) {
+            "ses" -> "audio/*"
+            "video" -> "video/*"
+            else -> "*/*"
+        }
     }
+
+    /**
+     * Bu MIME degeri niyete konulabilir mi?
+     *
+     * `null` ve bos bir yana, **`application/octet-stream` de ise
+     * yaramiyor**: "ne oldugunu bilmiyorum" demek ve hicbir oynatici bu
+     * turu ustlenmiyor. Niyete konursa dosya acilamiyor; joker turle
+     * degistirmek dogru uygulamalari listeye geri getiriyor.
+     *
+     * (Joker turun metni yalniz kodda geciyor — gerekcesi sinif
+     * basindaki ic ice yorum uyarisinda.)
+     */
+    private fun kullanilirMi(mime: String?): Boolean =
+        !mime.isNullOrBlank() &&
+            mime.contains('/') &&
+            !mime.equals("application/octet-stream", ignoreCase = true)
 
     private fun acmaNiyeti(adres: Uri, mime: String): Intent =
         Intent(Intent.ACTION_VIEW).apply {
