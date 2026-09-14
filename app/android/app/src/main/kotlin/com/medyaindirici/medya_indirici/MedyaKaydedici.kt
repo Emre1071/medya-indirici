@@ -240,7 +240,68 @@ class MedyaKaydedici(private val baglam: Context) {
         // Uretici galerisini uyandir. Basarisiz olsa bile kayit gecerli.
         taramayiZorla(adres)
 
-        return Sonuc(adres.toString(), gorecelYol)
+        // 🔴 ARTIK MUTLAK YOL DONUYOR, `content://` DEGIL.
+        //
+        // v0.1.6 cihazda `FileProvider kurulamadi: disk yolu okunamadi`
+        // verdi: MIUI, `content://` adresinden `DATA` sutununun
+        // okunmasini engelliyor. FileProvider kurulamayinca is
+        // `content://` yedegine dusuyor ve orada `SecurityException`
+        // aliniyordu (§4.13) — yani zincirin tamami tek bir engelli
+        // sutuna bagliydi.
+        //
+        // Yol artik SORULMUYOR, **kuruluyor**: hedef klasoru zaten biz
+        // sectik (`gorecelYol`), geriye yalnizca son dosya adi kaliyor ve
+        // `DISPLAY_NAME` engellenmeyen bir sutun.
+        val mutlak = mutlakYolKur(adres, gorecelYol)
+
+        // Kurulamadiysa eski davranis: `content://`. Arayuz o durumda da
+        // calisiyor (bkz. `DosyaKoprusu.saglayiciAdresi` geriye donuk yol).
+        return Sonuc(mutlak ?: adres.toString(), gorecelYol)
+    }
+
+    /**
+     * Kaydin diskteki mutlak yolu — **sorularak degil, kurularak.**
+     *
+     * `DATA` sutunu kullanimdan kaldirilmis olmasi bir yana, MIUI onu
+     * okutmuyor. Oysa yolun iki parcasini da biliyoruz:
+     *
+     * - **Klasor**: `RELATIVE_PATH` olarak kaydi acarken BIZ verdik.
+     * - **Ad**: `DISPLAY_NAME`, siradan ve engellenmeyen bir sutun.
+     *
+     * Adi geri okumak sart, kendi verdigimiz adi varsaymak degil:
+     * MediaProvider adi degistirebiliyor (uzanti duzeltmesi, ad
+     * cakismasinda `(1)` eki). Varsayilan ad bir harf tutmazsa uretilen
+     * yol var olmayan bir dosyayi gosterir.
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun mutlakYolKur(adres: Uri, gorecelYol: String): String? {
+        val ad = gosterilenAd(adres)
+        if (ad == null) {
+            Log.w(ETIKET, "DISPLAY_NAME okunamadi, mutlak yol kurulamadi")
+            return null
+        }
+
+        @Suppress("DEPRECATION")
+        val kok = Environment.getExternalStorageDirectory()
+        return File(File(kok, gorecelYol), ad).absolutePath
+    }
+
+    /** Kaydin son dosya adi; okunamazsa `null`. */
+    private fun gosterilenAd(adres: Uri): String? {
+        val sutun = MediaStore.MediaColumns.DISPLAY_NAME
+        return try {
+            baglam.contentResolver
+                .query(adres, arrayOf(sutun), null, null, null)
+                ?.use { imlec ->
+                    if (!imlec.moveToFirst()) return null
+                    val dizin = imlec.getColumnIndex(sutun)
+                    if (dizin < 0) return null
+                    imlec.getString(dizin)?.takeIf { it.isNotBlank() }
+                }
+        } catch (h: Throwable) {
+            Log.w(ETIKET, "DISPLAY_NAME sorgusu patladi: $adres", h)
+            null
+        }
     }
 
     /**

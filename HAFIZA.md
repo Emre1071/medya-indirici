@@ -10,14 +10,16 @@
 > 🔒 **Bu dosya işle birlikte güncellenir** — her kritik değişiklik, hata
 > çözümü ve sürüm yükseltmesinden sonra. Kuralın tamamı §8 başında.
 >
-> Son güncelleme: 2026-09-14 — **v0.1.6 yayında** (versionCode 2007).
-> Cihaz testleri üç turda üç şey çürüttü, üçü de düzeltildi:
+> Son güncelleme: 2026-09-15 — **v0.1.7 yayında** (versionCode 2008).
+> Cihaz testleri **dört turda dört şey çürüttü**, dördü de düzeltildi:
 > `Movies/` MIUI'de taranmıyor → video **`DCIM/MedyaIndirici`** (§4.12);
 > MediaStore adresi paylaşılamıyor (`SecurityException`) → **FileProvider
 > asıl yol** (§4.13); WhatsApp webm/mkv kabul etmiyor → **mp4 remux**
-> (§4.14). v0.1.3'te gelenler: §4.9 Instagram, §4.10 açma, §4.11 kalıcı
-> geçmiş. Testler 62.
-> 🔴 **v0.1.6 cihazda denenmedi** — §7 sonundaki listeye bak.
+> (§4.14); MIUI `DATA` sütununu okutmuyor → **mutlak yol + önbellek
+> kopyası**, `DATA` tamamen terk edildi (§4.13).
+> v0.1.3'te gelenler: §4.9 Instagram, §4.10 açma, §4.11 kalıcı geçmiş.
+> Testler 62.
+> 🔴 **v0.1.7 cihazda denenmedi** — §7 sonundaki listeye bak.
 > Öncesi: OTA doğrulandı (v0.1.1), ses ikonu §6, R8 §4.6, çökme §4.4-§4.5,
 > paylaş menüsü §4.3, imza anahtarı §12, derleme engeli §10.
 
@@ -49,6 +51,7 @@
 | Xiaomi/MIUI'de dosya galeride yok | MIUI `Movies/` kökünü taramıyor → video DCIM'e alındı | §4.12 |
 | Dosya yöneticisinden açılıyor ama uygulamadan açılmıyor | `external_primary` birim adı / çözülemeyen MIME / sağlayıcı erişimi | §4.10 |
 | `SecurityException — UID does not have permission` | MediaStore adresine izin yazılamıyor; sahibi biz değiliz | §4.13 |
+| `FileProvider kurulamadi: disk yolu okunamadi` | MIUI `content://` üzerinden `DATA` sütununu okutmuyor | §4.13 |
 | Video WhatsApp'tan gönderilemiyor | Kap webm/mkv; `--merge-output-format` tek parçada çalışmıyor | §4.14 |
 | Kotlin'de "Unclosed comment" / "top level declaration bekleniyor" | Yorumda `audio/` + yıldız — blok yorumlar iç içe geçiyor | §4.10 |
 
@@ -893,6 +896,69 @@ başarısız olurdu. Normal akışta hiç kullanılmıyor.
 ⚠️ `grantUriPermission` yalnız **kendi** yetkimiz için çağrılıyor; sahibi
 olmadığın sağlayıcıda `SecurityException` atıyor ve günlüğü kirletiyordu.
 
+#### İkinci tur: `DATA` sütunu da okutulmuyor
+
+v0.1.6 cihazda yine tutmadı: *`FileProvider kurulamadi: disk yolu
+okunamadi`*. 🔑 **MIUI, `content://` adresinden `DATA` sütununu
+okutmuyor.** Zincirin tamamı o tek sütuna bağlıydı; okunamayınca
+`content://` son çaresine düşülüyor ve orada yine `SecurityException`
+alınıyordu.
+
+**Çözüm: yol artık SORULMUYOR, KURULUYOR.** `MedyaKaydedici.modernKaydet`
+`content://` yerine **mutlak yol** döndürüyor. İki parçayı da zaten
+biliyoruz:
+
+| Parça | Kaynak |
+|---|---|
+| Klasör | `RELATIVE_PATH` — kaydı açarken **biz** verdik |
+| Ad | `DISPLAY_NAME` — sıradan, **engellenmeyen** sütun |
+
+⚠️ **Ad geri okunuyor, varsayılmıyor.** MediaProvider adı
+değiştirebiliyor (uzantı düzeltmesi, ad çakışmasında `(1)` eki). Kendi
+verdiğimiz adı varsaymak, bir harf tutmadığında var olmayan bir dosyayı
+gösteren yol üretirdi.
+
+#### 🔑 Mutlak yol tek başına YETMİYOR — önbellek kopyası
+
+Mutlak yol doğru olsa bile **Android 10'dan beri ortak klasörlere düz
+dosya erişimi kapalı**: uygulamanın bir okuma izni yok
+(`WRITE_EXTERNAL_STORAGE` `maxSdkVersion=28`), yani `canRead()` `false`
+dönüyor. `FileProvider.getUriForFile` o yolu kabul eder — yalnızca yol
+çevirisi yapıyor, I/O yok — ama karşı uygulama dosyayı istediğinde
+**bizim sağlayıcımız onu açamaz** ve zincir yine kopardı.
+
+İki seçenek vardı:
+
+| | Bedeli |
+|---|---|
+| `READ_EXTERNAL_STORAGE` (≤32) + `READ_MEDIA_*` (33+) | Kullanıcıya **yeni izin sorusu**, üç ayrı sürüm dalı, API 29'da yine çalışmıyor |
+| **Kendi MediaStore kaydımızı okuyup önbelleğe kopyalamak** | Paylaşım anında bir kopya |
+
+İkincisi seçildi. **Kendi eklediğimiz kaydı izinsiz okuyabiliyoruz** —
+yazarken de izin gerekmemişti (§4.1). Böylece §4.1'deki "bizim işimiz
+yazmak" çizgisi korunuyor, kullanıcı yeni bir izin sorusu görmüyor.
+
+`DosyaKoprusu.saglayiciAdresi` iki yollu:
+
+1. Dosya **doğrudan okunabiliyorsa** → FileProvider. API 28 ve altında
+   her zaman böyle; kopya hiç oluşmuyor.
+2. Okunamıyorsa → MediaStore kaydı bulunup baytlar `cacheDir/paylasim`
+   altına kopyalanıyor, FileProvider onu sunuyor. Klasör her çağrıda
+   temizleniyor: paylaşım geçici bir istek, 60 MB'lik kopyalar birikirse
+   telefonu doldurur.
+
+⚠️ **MediaStore kaydı `DATA` ile DEĞİL** aranıyor: mutlak yol
+`RELATIVE_PATH` + `DISPLAY_NAME` olarak parçalanıp sorgulanıyor. İkisi de
+engellenmeyen sütunlar. `content://` ile başlayan yollar da kabul
+ediliyor — v0.1.6 ve öncesinde inen dosyaların **kalıcı geçmiş
+satırlarında** yol o biçimde duruyor ve geçmiş silinmediği sürece
+yaşamaya devam ediyor.
+
+ℹ️ `content://` son çaresi bırakıldı ama artık `SecurityException` ile
+bitmesi **beklenen** bir dal. Asıl değeri günlükte: oraya düşüldüğü
+görülürse FileProvider'ın niçin kurulamadığı hemen üstteki satırlarda
+yazıyor.
+
 ### 4.14 🔴 WhatsApp'a video gönderilemiyor — üç ayrı şart
 
 **1. Kap mp4 olmalı.** 🔑 **`--merge-output-format mp4` TEK BAŞINA
@@ -1161,8 +1227,8 @@ Uzun süre hiçbir şey telefonda çalışmamıştı; artık ayrım net tutulmal
 | **Dosyayı açma / paylaşma** | ❓ §4.10 — hiç denenmedi |
 | **Instagram istikrarı** | ❓ §4.9 — hiç denenmedi |
 | **MIUI'de galeride görünme** | ❓ v0.1.4'te başarısızdı (`Movies/` taranmıyor); v0.1.5'te DCIM'e alındı, **denenmedi** |
-| **Uygulama içinden açma** | 🔴 v0.1.5'te **BAŞARISIZ** — `SecurityException`. v0.1.6'da FileProvider asıl yol oldu (§4.13) |
-| **WhatsApp'a video gönderme** | 🔴 v0.1.5'te **BAŞARISIZ**. v0.1.6'da mp4 remux + ClipData + somut MIME (§4.14) |
+| **Uygulama içinden açma** | 🔴 v0.1.6'da **BAŞARISIZ** — `disk yolu okunamadi`. v0.1.7'de `DATA` tamamen terk edildi (§4.13) |
+| **WhatsApp'a video gönderme** | ❓ v0.1.5'te başarısızdı; v0.1.6'da mp4 remux + ClipData + somut MIME (§4.14) — **denenmedi** |
 | **İptal** | ❓ hiç denenmedi |
 | **OTA güncelleme** (indir + kur) | ✅ **v0.1.1 telefona OTA ile kuruldu** (2026-09-06) — kontrol, indirme, izin ve kurulum adımlarının tamamı çalışıyor |
 
@@ -1342,9 +1408,9 @@ yazılır, derleme orada koşar. Bu bir çözüm değil, ölçüm yöntemi.
 | GitHub CLI (`gh` 2.100.0) + oturum (`Emre1071`) | ✅ |
 | Uzak depo — **github.com/Emre1071/medya-indirici** (public) | ✅ push edildi |
 | Kalıcı imza anahtarı | ✅ §12 |
-| **Yayındaki sürüm: `v0.1.6`** | ✅ APK + `mapping.txt` ekli |
+| **Yayındaki sürüm: `v0.1.7`** | ✅ APK + `mapping.txt` ekli |
 
-Release: <https://github.com/Emre1071/medya-indirici/releases/tag/v0.1.6>
+Release: <https://github.com/Emre1071/medya-indirici/releases/tag/v0.1.7>
 
 ✅ **OTA yolu çalışıyor** — v0.1.1 telefona bu yolla kuruldu (2026-09-06).
 Sürüm geçmişi: `v0.1.0` (bozuk) → `v0.1.1` (çökme + indirme düzeltmeleri)
@@ -1352,7 +1418,8 @@ Sürüm geçmişi: `v0.1.0` (bozuk) → `v0.1.1` (çökme + indirme düzeltmeler
 §4.10, Instagram istikrarı §4.9, dosya açma §4.10)
 → `v0.1.4` (MIUI denemesi — §4.12, **yetmedi**)
 → `v0.1.5` (video DCIM'e, sıralı açma denemesi)
-→ `v0.1.6` (FileProvider'a geçiş §4.13, WhatsApp mp4 §4.14).
+→ `v0.1.6` (FileProvider'a geçiş §4.13, WhatsApp mp4 §4.14)
+→ `v0.1.7` (mutlak yol, `DATA` terk edildi §4.13).
 
 ⚠️ **v0.1.4 telefona kurulana kadar §4.9-§4.12'nin hiçbiri denenmiş
 sayılmaz** — telefondaki v0.1.2 bunların hiçbirini içermiyor.
@@ -1425,9 +1492,10 @@ gh release create v0.1.1 `
 | v0.1.3 | `0.1.3+4` | 2004 |
 | v0.1.4 | `0.1.4+5` | 2005 |
 | v0.1.5 | `0.1.5+6` | 2006 |
-| **v0.1.6** | **`0.1.6+7`** | **2007** |
+| v0.1.6 | `0.1.6+7` | 2007 |
+| **v0.1.7** | **`0.1.7+8`** | **2008** |
 
-Tek APK'ya (universal) geçilirse versionCode `7` olur ve **2007'den küçük
+Tek APK'ya (universal) geçilirse versionCode `8` olur ve **2008'den küçük
 kaldığı için kurulum reddedilir** — o gün bu hesap hatırlanmalı.
 
 🔑 **Release notu doğrudan kullanıcıya gösteriliyor** (Ayarlar ekranında,

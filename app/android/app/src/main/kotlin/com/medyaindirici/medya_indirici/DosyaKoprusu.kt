@@ -5,6 +5,7 @@ import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
 import android.webkit.MimeTypeMap
@@ -138,7 +139,7 @@ class DosyaKoprusu(private val etkinlik: Activity) {
             if (paylas) mime = paylasimIcinSomut(mime, tur)
             gunluk.append("MIME: $mime\n")
 
-            val adaylar = adaylariKur(adres, mime, paylas, gunluk)
+            val adaylar = adaylariKur(yol, adres, mime, paylas, gunluk)
 
             for (aday in adaylar) {
                 try {
@@ -202,6 +203,7 @@ class DosyaKoprusu(private val etkinlik: Activity) {
      * carenin bedeli uc satir, yoklugunun bedeli calismayan bir dugme.
      */
     private fun adaylariKur(
+        yol: String,
         adres: Uri,
         mime: String,
         paylas: Boolean,
@@ -216,7 +218,7 @@ class DosyaKoprusu(private val etkinlik: Activity) {
         }
 
         // 1) ASIL YOL: kendi FileProvider adresimiz.
-        val saglayici = saglayiciAdresi(adres, gunluk)
+        val saglayici = saglayiciAdresi(yol, gunluk)
         if (saglayici != null) {
             gunluk.append("Aday 1 (FileProvider): $saglayici\n")
             ekle("FileProvider", saglayici)
@@ -237,14 +239,16 @@ class DosyaKoprusu(private val etkinlik: Activity) {
             )
         }
 
-        // 3) SON CARE: MediaStore adresi. Yalnizca FileProvider
-        //    kurulamadiginda is goruyor (bkz. ustteki uyari).
+        // 3) SON CARE: `content://` adresini dogrudan vermek.
+        //
+        // ⚠️ Bunun `SecurityException` ile bitmesi BEKLENIYOR (§4.13):
+        // sahibi olmadigimiz bir saglayiciya izin yazamiyoruz. Yine de
+        // duruyor, cunku hicbir sey denememekten iyi — bazi oynaticilar
+        // kendi depolama izinleriyle okuyabiliyor. Asil degeri gunlukte:
+        // buraya dusuldugu gorulurse FileProvider'in NICIN kurulamadigi
+        // hemen ustteki satirlarda yaziyor.
         if (saglayici == null) {
-            uyumluAdres(adres)?.let {
-                gunluk.append("Son care 1 (MediaStore): $it\n")
-                ekle("media/external", it)
-            }
-            gunluk.append("Son care 2 (verilen adres): $adres\n")
+            gunluk.append("Son care (verilen adres): $adres\n")
             ekle("verilen adres", adres)
 
             liste.firstOrNull()?.let { ilk ->
@@ -265,25 +269,53 @@ class DosyaKoprusu(private val etkinlik: Activity) {
     }
 
     /**
-     * Verilen adresi **kendi FileProvider adresimize** cevirir.
+     * Paylasilabilir bir FileProvider adresi uretir.
      *
-     * Uc adim: diskteki gercek yolu bul → `File`'a cevir → saglayiciya ver.
-     * Herhangi biri tutmazsa `null` ve sebebi gunluge yaziliyor; cagiran
-     * taraf son careye dusuyor.
+     * ## 🔴 `DATA` sutunu artik HIC sorulmuyor
+     * v0.1.6 cihazda `FileProvider kurulamadi: disk yolu okunamadi` verdi:
+     * MIUI `content://` adresinden `DATA` sutununu okutmuyor. Zincirin
+     * tamami o tek sutuna bagliydi; okunamayinca `content://` yedegine
+     * dusuluyor ve orada `SecurityException` aliniyordu.
+     *
+     * Artik `MedyaKaydedici` dogrudan **mutlak yol** donduruyor, yani
+     * sorulacak bir sey kalmiyor.
+     *
+     * ## Iki yol, ikisi de gerekli
+     * 1. **Dosya okunabiliyorsa** dogrudan FileProvider. API 28 ve altinda
+     *    her zaman boyle; yeni surumlerde de medya erisimi aciksa.
+     * 2. **Okunamiyorsa onbellege kopyalaniyor.** Android 10'dan beri
+     *    kapsamli depolama ortak klasorlere DUZ DOSYA erisimini kapatiyor:
+     *    yol dogru olsa bile `canRead()` `false` donebiliyor ve
+     *    FileProvider dosyayi acamaz. Ama kendi MediaStore kaydimizi
+     *    **izinsiz** okuyabiliyoruz — bayt akisi oradan alinip uygulamanin
+     *    kendi onbellegine yaziliyor, FileProvider onu sunuyor.
+     *
+     * 🔑 Ikinci yol **yeni izin gerektirmiyor.** `READ_EXTERNAL_STORAGE` /
+     * `READ_MEDIA_*` eklemek kullaniciya yeni bir izin sorusu cikarirdi;
+     * §4.1'de "bizim isimiz yazmak" diye yazilan cizgi korunuyor.
      */
-    private fun saglayiciAdresi(adres: Uri, gunluk: StringBuilder): Uri? {
-        val diskte = diskYolu(adres)
-        if (diskte == null) {
-            gunluk.append("FileProvider kurulamadi: disk yolu okunamadi\n")
+    private fun saglayiciAdresi(yol: String, gunluk: StringBuilder): Uri? {
+        val dosya = File(yol)
+
+        // 1) Dogrudan okunabiliyor mu?
+        if (!yol.startsWith("content://") && dosya.canRead()) {
+            gunluk.append("Dosya dogrudan okunabiliyor" + "\n")
+            return saglayiciyaVer(dosya, gunluk)
+        }
+
+        // 2) MediaStore uzerinden onbellege kopyala.
+        val kayit = mediaStoreAdresi(yol, gunluk)
+        if (kayit == null) {
+            gunluk.append("MediaStore kaydi bulunamadi" + "\n")
             return null
         }
 
-        return try {
-            val dosya = File(diskte)
-            if (!dosya.exists()) {
-                gunluk.append("FileProvider kurulamadi: dosya yok ($diskte)\n")
-                return null
-            }
+        val kopya = onbellegeKopyala(kayit, dosya.name, gunluk) ?: return null
+        return saglayiciyaVer(kopya, gunluk)
+    }
+
+    private fun saglayiciyaVer(dosya: File, gunluk: StringBuilder): Uri? =
+        try {
             FileProvider.getUriForFile(
                 etkinlik,
                 "${etkinlik.packageName}.dosyalar",
@@ -292,61 +324,95 @@ class DosyaKoprusu(private val etkinlik: Activity) {
         } catch (h: Throwable) {
             // Yol `dosya_yollari.xml` agaclarinin disindaysa (ornegin SD
             // kart) FileProvider `IllegalArgumentException` atiyor.
-            gunluk.append("FileProvider kurulamadi: ${h.message} ($diskte)\n")
-            Log.w(ETIKET, "FileProvider adresi uretilemedi: $diskte", h)
+            gunluk.append("FileProvider reddetti: ${h.message}" + "\n")
+            Log.w(ETIKET, "FileProvider adresi uretilemedi: $dosya", h)
+            null
+        }
+
+    /**
+     * Yolun MediaStore kaydini bulur.
+     *
+     * Iki giris bicimi de destekleniyor:
+     * - `content://…` — **geriye donuk uyumluluk.** v0.1.6 ve oncesinde
+     *   inen dosyalarin gecmis kayitlarinda yol boyle duruyor; kalici
+     *   gecmis silinmedigi surece bu satirlar yasamaya devam ediyor.
+     * - Mutlak yol — `RELATIVE_PATH` + `DISPLAY_NAME` olarak parcalanip
+     *   sorgulaniyor. 🔑 `DATA` ile DEGIL: sorgulanan iki sutun da
+     *   engellenmiyor.
+     */
+    private fun mediaStoreAdresi(yol: String, gunluk: StringBuilder): Uri? {
+        if (yol.startsWith("content://")) return Uri.parse(yol)
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+
+        val dosya = File(yol)
+        val ad = dosya.name
+        val klasor = dosya.parentFile?.name ?: return null
+        val ust = dosya.parentFile?.parentFile?.name ?: return null
+        val gorecel = "$ust/$klasor/"
+
+        val sesMi = ust.equals("Music", ignoreCase = true)
+        val koleksiyon = if (sesMi) {
+            MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+        } else {
+            MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+        }
+
+        return try {
+            etkinlik.contentResolver.query(
+                koleksiyon,
+                arrayOf(MediaStore.MediaColumns._ID),
+                "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND " +
+                    "${MediaStore.MediaColumns.RELATIVE_PATH} = ?",
+                arrayOf(ad, gorecel),
+                null,
+            )?.use { imlec ->
+                if (!imlec.moveToFirst()) {
+                    gunluk.append("MediaStore sorgusu bos: $gorecel$ad" + "\n")
+                    return null
+                }
+                val kimlik = imlec.getLong(0)
+                Uri.withAppendedPath(koleksiyon, kimlik.toString())
+            }
+        } catch (h: Throwable) {
+            gunluk.append("MediaStore sorgusu patladi: ${h.message}" + "\n")
+            Log.w(ETIKET, "MediaStore sorgusu patladi: $yol", h)
             null
         }
     }
 
     /**
-     * `content://media/external_primary/...` → `content://media/external/...`
+     * Kaydin baytlarini uygulamanin kendi onbellegine kopyalar.
      *
-     * 🔑 Kayit `VOLUME_EXTERNAL_PRIMARY` ile aciliyor ve donen adres o birim
-     * adini tasiyor. Ikisi ayni satiri gosteriyor, ama ucuncu taraf
-     * oynaticilarin cogu yalnizca klasik `external` bicimini bekliyor ve
-     * digerini "tanimadigim adres" diye reddediyor. Ayni satira giden
-     * ikinci bir kapi.
+     * Kendi MediaStore kaydimizi okumak icin **izin gerekmiyor** — onu biz
+     * ekledik. Onbellek klasoru `dosya_yollari.xml`'de zaten paylasiliyor
+     * (guncelleme APK'si icin acilmisti).
      *
-     * MediaStore adresi degilse `null`.
+     * Klasor her cagrida temizleniyor: paylasim gecici bir istek, 60 MB'lik
+     * kopyalar birikirse telefonu doldurur.
      */
-    private fun uyumluAdres(adres: Uri): Uri? {
-        if (adres.authority != MediaStore.AUTHORITY) return null
-
-        val parcalar = adres.pathSegments
-        if (parcalar.size < 2) return null
-        if (parcalar[0] != MediaStore.VOLUME_EXTERNAL_PRIMARY) return null
-
-        val kurucu = adres.buildUpon().path(null)
-        kurucu.appendPath(MediaStore.VOLUME_EXTERNAL)
-        parcalar.drop(1).forEach { kurucu.appendPath(it) }
-        return kurucu.build()
-    }
-
-    /**
-     * MediaStore kaydinin diskteki gercek yolu; yoksa `null`.
-     *
-     * `DATA` sutunu API 29'da kullanimdan kaldirildi ama **okunabilir**
-     * kalmaya devam ediyor (yazmak yasak, okumak degil). FileProvider
-     * yedegi icin baska bir girdi yok.
-     */
-    private fun diskYolu(adres: Uri): String? {
-        // `content` disi bir sema (API 24-28 duz yolu) zaten dosya yolu.
-        if (adres.scheme != "content") return adres.path
-
-        @Suppress("DEPRECATION")
-        val sutun = MediaStore.MediaColumns.DATA
-
+    private fun onbellegeKopyala(
+        kayit: Uri,
+        ad: String,
+        gunluk: StringBuilder,
+    ): File? {
         return try {
-            etkinlik.contentResolver
-                .query(adres, arrayOf(sutun), null, null, null)
-                ?.use { imlec ->
-                    if (!imlec.moveToFirst()) return null
-                    val dizin = imlec.getColumnIndex(sutun)
-                    if (dizin < 0) return null
-                    imlec.getString(dizin)?.takeIf { it.isNotBlank() }
-                }
+            val klasor = File(etkinlik.cacheDir, "paylasim")
+            if (klasor.exists()) klasor.listFiles()?.forEach { it.delete() }
+            klasor.mkdirs()
+
+            val hedef = File(klasor, if (ad.isBlank()) "medya" else ad)
+            etkinlik.contentResolver.openInputStream(kayit)?.use { giris ->
+                hedef.outputStream().use { cikis -> giris.copyTo(cikis) }
+            } ?: run {
+                gunluk.append("MediaStore akisi acilamadi" + "\n")
+                return null
+            }
+
+            gunluk.append("Onbellege kopyalandi: ${hedef.length()} bayt" + "\n")
+            hedef
         } catch (h: Throwable) {
-            Log.w(ETIKET, "Disk yolu okunamadi: $adres", h)
+            gunluk.append("Onbellege kopyalanamadi: ${h.message}" + "\n")
+            Log.w(ETIKET, "Onbellege kopyalanamadi: $kayit", h)
             null
         }
     }
